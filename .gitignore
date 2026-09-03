@@ -1,0 +1,10 @@
+node_modules/
+contract/managed/
+contract/managed-legacy/
+contract/dist/
+integration/contract-managed/
+integration/midnight-level-db/
+*.log
+research/
+.midnight-local-dev/
+.warden-reference/
