@@ -1,0 +1,98 @@
+pragma language_version >= 0.20;
+
+import CompactStandardLibrary;
+
+export sealed ledger poolId: Bytes<32>;
+export sealed ledger genesisTime: Uint<64>;
+export sealed ledger epochLength: Uint<64>;
+// PoW target compared against a 24-bit prefix of the registration hash (see
+// hashPrefix below). A full Bytes<32> hash cannot be widened to a Uint of any
+// practical width for a magnitude comparison: casting the whole 32-byte value
+// to Uint<64> (or wider) throws a runtime range error unless the hash's top
+// bits happen to already be zero with astronomically low probability. Working
+// with an explicit, narrow byte-prefix keeps the difficulty tunable and the
+// cast well-defined.
+export sealed ledger powTarget: Uint<32>;
+export sealed ledger ownerKey: Bytes<32>;
+
+export ledger active: Boolean;
+export ledger registered: Set<Bytes<32>>;
+export ledger spentNullifiers: Set<Bytes<32>>;
+
+witness mySecret(): Bytes<32>;
+witness ownerSecret(): Bytes<32>;
+
+constructor(id: Bytes<32>, startTime: Uint<64>, epochSeconds: Uint<64>, target: Uint<32>, owner: Bytes<32>) {
+  poolId = disclose(id);
+  genesisTime = disclose(startTime);
+  epochLength = disclose(epochSeconds);
+  powTarget = disclose(target);
+  ownerKey = disclose(owner);
+  active = true;
+}
+
+circuit regCommitment(secret: Bytes<32>): Bytes<32> {
+  return persistentCommit<Bytes<32>>(secret, pad(32, "sponsor:reg:v1:"));
+}
+
+// Takes the first three bytes of a hash as a Uint<32> value (0..16777215),
+// giving a tunable, well-defined magnitude to compare a PoW target against.
+circuit hashPrefix(h: Bytes<32>): Uint<32> {
+  const asVec: Vector<32, Uint<8>> = h as Vector<32, Uint<8>>;
+  const combined = asVec[0] * 65536 + asVec[1] * 256 + asVec[2];
+  return combined as Uint<32>;
+}
+
+// Exported (and pure) so a pool creator can compute their own ownerKey
+// commitment off-chain before deployment, and so tests can derive it without
+// re-implementing the hash function independently of the compiled circuit.
+export pure circuit derivedOwnerKey(secret: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<2, Bytes<32>>>([pad(32, "sponsor:owner:v1:"), secret]);
+}
+
+export circuit deactivate(): [] {
+  assert(derivedOwnerKey(ownerSecret()) == ownerKey, "not pool owner");
+  active = false;
+}
+
+// Read-only helper so a client can search for a valid nonce (and tests can do
+// the same) without mutating ledger state on every failed attempt. Uses the
+// exact same hash/prefix path the enforcing check in `register` uses, so a
+// nonce accepted here is guaranteed to be accepted there.
+export pure circuit checkPow(secret: Bytes<32>, nonce: Bytes<32>, target: Uint<32>): Boolean {
+  const powInput: Bytes<32> = persistentHash<Vector<3, Bytes<32>>>([pad(32, "sponsor:pow:v1:"), secret, nonce]);
+  return hashPrefix(powInput) < target;
+}
+
+export circuit register(nonce: Bytes<32>): [] {
+  assert(active, "pool not active");
+  const secret = mySecret();
+  const powInput: Bytes<32> = persistentHash<Vector<3, Bytes<32>>>([pad(32, "sponsor:pow:v1:"), secret, nonce]);
+  assert(hashPrefix(powInput) < powTarget, "pow requirement not met");
+  const commitment = disclose(regCommitment(secret));
+  assert(!registered.member(commitment), "already registered");
+  registered.insert(commitment);
+}
+
+circuit epochWindowOk(epoch: Uint<64>): Boolean {
+  const start: Uint<64> = (genesisTime + epoch * epochLength) as Uint<64>;
+  const end: Uint<64> = (start + epochLength) as Uint<64>;
+  return blockTimeGte(disclose(start)) && blockTimeLt(disclose(end));
+}
+
+export circuit authorize(epoch: Uint<64>): Bytes<32> {
+  assert(active, "pool not active");
+  assert(epochWindowOk(epoch), "epoch out of range for current block time");
+  const secret = mySecret();
+  const commitment = regCommitment(secret);
+  assert(registered.member(commitment), "not registered");
+  const nullifier = disclose(persistentHash<Vector<4, Bytes<32>>>([
+    pad(32, "sponsor:auth:v1:"),
+    poolId,
+    epoch as Field as Bytes<32>,
+    secret
+  ]));
+  assert(!spentNullifiers.member(nullifier), "already authorized this epoch");
+  spentNullifiers.insert(nullifier);
+  return nullifier;
+}
