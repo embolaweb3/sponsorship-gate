@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "deploy": "node --experimental-strip-types src/deploy-and-call.ts"
+    "deploy": "node --experimental-strip-types src/deploy-and-call.ts",
+    "deploy:preprod": "TARGET=preprod node --experimental-strip-types src/deploy-and-call.ts",
+    "preprod:address": "node --experimental-strip-types src/print-preprod-address.ts"
   },
   "dependencies": {
     "@midnight-ntwrk/compact-runtime": "0.16.0",

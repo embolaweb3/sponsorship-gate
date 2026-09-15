@@ -15,6 +15,7 @@
 // (Bob unbalanced, Alice balancing) is explicitly out of scope until this
 // path is confirmed working end to end.
 
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Buffer } from "node:buffer";
@@ -50,15 +51,32 @@ const zkConfigPath = path.resolve(currentDir, "..", "contract-managed", "sponsor
 const privateStateId = "sponsorshipGatePrivateState";
 
 const GENESIS_MINT_WALLET_SEED = "0000000000000000000000000000000000000000000000000000000000000001";
+const PREPROD_SEED_PATH = path.resolve(currentDir, "..", ".preprod-seed");
 
-setNetworkId("undeployed");
+// TARGET=preprod npm run deploy points this at the real public Preprod
+// network instead of the local devnet — everything else (contract, wallet
+// logic, demo sequence) is identical either way. The proof server is
+// always local regardless of target: Midnight's own docs are explicit
+// that it "runs locally... because it handles your private data".
+const TARGET = process.env.TARGET === "preprod" ? "preprod" : "local";
+const seed = TARGET === "preprod" ? fs.readFileSync(PREPROD_SEED_PATH, "utf8").trim() : GENESIS_MINT_WALLET_SEED;
 
-const config = {
-  indexer: "http://127.0.0.1:8088/api/v3/graphql",
-  indexerWS: "ws://127.0.0.1:8088/api/v3/graphql/ws",
-  node: "http://127.0.0.1:9944",
-  proofServer: "http://127.0.0.1:6300"
-};
+setNetworkId(TARGET === "preprod" ? "preprod" : "undeployed");
+
+const config =
+  TARGET === "preprod"
+    ? {
+        indexer: "https://indexer.preprod.midnight.network/api/v4/graphql",
+        indexerWS: "wss://indexer.preprod.midnight.network/api/v4/graphql/ws",
+        node: "https://rpc.preprod.midnight.network",
+        proofServer: "http://127.0.0.1:6300"
+      }
+    : {
+        indexer: "http://127.0.0.1:8088/api/v3/graphql",
+        indexerWS: "ws://127.0.0.1:8088/api/v3/graphql/ws",
+        node: "http://127.0.0.1:9944",
+        proofServer: "http://127.0.0.1:6300"
+      };
 
 function log(msg: string) {
   console.log(`  ${msg}`);
@@ -160,13 +178,29 @@ async function createWalletAndMidnightProvider(ctx: Awaited<ReturnType<typeof bu
   };
 }
 
-async function main() {
-  console.log("\nSponsorship gate — LOCAL devnet validation (single-party probe)\n=================================================================\n");
+const waitForFunds = (wallet: WalletFacade): Promise<bigint> =>
+  Rx.firstValueFrom(
+    wallet.state().pipe(
+      Rx.throttleTime(30_000),
+      Rx.tap(() => log("still waiting for funds — this is normal, faucet + sync can take a while")),
+      Rx.filter((s) => s.isSynced),
+      Rx.map((s) => s.unshielded.balances[unshieldedToken().raw] ?? 0n),
+      Rx.filter((b) => b > 0n)
+    )
+  );
 
-  const ctx = await withStatus("building genesis wallet", () => buildWallet(GENESIS_MINT_WALLET_SEED));
-  await withStatus("syncing with node", () => waitForSync(ctx.wallet));
+async function main() {
+  console.log(
+    `\nSponsorship gate — ${TARGET === "preprod" ? "Preprod" : "LOCAL devnet"} validation (single-party probe)\n=================================================================\n`
+  );
+
+  const ctx = await withStatus(TARGET === "preprod" ? "building Preprod wallet" : "building genesis wallet", () => buildWallet(seed));
+  await withStatus("syncing with node (can take a long time on Preprod — this is normal, not a failure)", () => waitForSync(ctx.wallet));
   const balance0 = await Rx.firstValueFrom(ctx.wallet.state().pipe(Rx.map((s) => s.unshielded.balances[unshieldedToken().raw] ?? 0n)));
   log(`unshielded balance: ${balance0.toLocaleString()} tNight`);
+  if (balance0 === 0n) {
+    await withStatus("waiting for faucet funds", () => waitForFunds(ctx.wallet));
+  }
   await registerForDustGeneration(ctx.wallet, ctx.unshieldedKeystore);
 
   const walletAndMidnightProvider = await createWalletAndMidnightProvider(ctx);
@@ -246,11 +280,11 @@ async function main() {
     log(`  correctly rejected: ${(e as Error).message.split("\n")[0]}`);
   }
 
-  console.log("\n✓ LOCAL devnet validation complete — real deployment, real register/authorize transactions.\n");
+  console.log(`\n✓ ${TARGET === "preprod" ? "Preprod" : "LOCAL devnet"} validation complete — real deployment, real register/authorize transactions.\n`);
   process.exit(0);
 }
 
 main().catch((e) => {
-  console.error("\n✗ LOCAL devnet validation failed:\n", e);
+  console.error(`\n✗ ${TARGET === "preprod" ? "Preprod" : "LOCAL devnet"} validation failed:\n`, e);
   process.exit(1);
 });
