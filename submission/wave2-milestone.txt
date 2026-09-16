@@ -1,0 +1,9 @@
+Wave 2: from SIMULATED to a working LOCAL two-party sponsorship.
+
+- Finish contract deployment to a real local Midnight devnet (node, indexer, proof server), producing a real contract address and deployment transaction.
+- Build the sponsee-side unbalanced-transaction construction path, still missing from the integration script.
+- Implement the sponsor-side check the design specifies: inspecting a candidate transaction's own authorization effect before calling balanceFinalizedTransaction, closing the nullifier-uniqueness gap our review found.
+- Drive one real, end-to-end sponsored transaction: a genuinely unfunded sponsee wallet, fee-balanced entirely by a sponsor's DUST, landing on-chain.
+- Add integration-layer adversarial tests (duplicate submission, competing transactions, sponsor with insufficient DUST) that only make sense once real transaction construction exists to attack.
+
+Deliverable: a real LOCAL two-party sponsored transaction, not a simulated approximation of one.

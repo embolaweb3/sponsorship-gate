@@ -1,0 +1,10 @@
+Wave 3: Preprod deployment and hardening.
+
+- Deploy Sponsorship Gate to Midnight Preprod using the wallet already funded this wave, completing the sync that stalled during initial testing.
+- Run the full register/authorize lifecycle on Preprod with real proofs, real transactions, and real block confirmations — this project's first LIVE-network evidence.
+- Add a withdrawal/reclaim circuit so a sponsor can recover unused pool capacity, closing a gap the MVP deliberately left out.
+- Address unbounded growth of the registered and spentNullifiers sets with a documented, tested epoch-based pruning or capacity policy.
+- Ship a minimal reference sponsor service that implements the transaction-inspection requirement as real, running code instead of a specified interface.
+- Publish reproducible setup instructions so a third party can verify every claim independently, without trusting our word for it.
+
+Deliverable: a Preprod-deployed, independently verifiable sponsorship pool.
