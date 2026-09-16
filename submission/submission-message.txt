@@ -1,0 +1,15 @@
+In this first wave, we built Sponsorship Gate: anonymous, rate-limited fee sponsorship for Midnight — a base-layer-native alternative to Ethereum-style account-abstraction paymasters.
+
+The problem: sponsoring a stranger's transaction fee is how you onboard someone with zero balance, but doing it on a transparent chain means publishing a permanent public record of exactly who funded whom. Ethereum's own ecosystem is still patching that after the fact — a draft privacy-paymaster ERC, a separate TEE-based workaround. And removing identity without adding cost just turns sponsorship into an open drain for sybil accounts. Privacy and abuse-resistance usually pull in opposite directions.
+
+Our approach: a Compact contract that lets a sponsor fund a pool of anonymous, rate-limited sponsorship slots. A user registers a slot once by solving a small proof-of-work puzzle bound to a local secret — computation, not identity, is the cost of minting a slot. From then on, that secret can draw exactly one sponsored action per epoch, enforced by an epoch-scoped nullifier. The sponsor never learns who they sponsored. The chain never records a visible sponsor-to-user link the way a paymaster field does.
+
+Neither proof-of-work-as-sybil-cost nor nullifier rate-limiting is new cryptography. What's Midnight-specific is where this sits in the stack: Midnight already keeps its native fee-capacity resource (DUST) shielded and structurally separate from the value being moved, and already exposes third-party transaction balancing as a base wallet primitive instead of an application-level retrofit. We built the sponsorship layer to use that directly, rather than reimplementing a paymaster pattern on a chain that was never built for it.
+
+We also pushed the security review past "it compiles and tests pass." We found that two independently-built transactions authorizing the same secret and epoch produce the identical nullifier — meaning a bare nullifier is never, by itself, proof of which transaction produced it. A sponsor has to inspect the actual transaction it's about to fee-balance, not just check that a matching nullifier exists somewhere. That requirement is written directly into the interface a real sponsor service would need to implement, not left as a footnote.
+
+Where we actually are, stated plainly: 16 out of 16 adversarial tests pass against the compiled circuit (SIMULATED). We stood up a real local Midnight devnet — a real node, indexer, and proof server — and funded a real wallet with real NIGHT and DUST through real on-chain transactions (LOCAL, verified). Contract deployment and the two-party sponsored transaction are not yet complete, and no Preprod or LIVE transaction has happened. We're saying that directly instead of implying otherwise.
+
+What's next: finish the local deployment, drive one real sponsor-balances-sponsee transaction end to end, then move to Preprod.
+
+Private sponsorship should be a protocol primitive, not an identity leak.
