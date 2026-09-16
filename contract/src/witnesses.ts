@@ -3,12 +3,11 @@
  *
  * A witness is a TypeScript function with no Compact body: Compact declares
  * its signature (`witness mySecret(): Bytes<32>;`) and the driver — this file
- * — supplies the value at call time. Per Midnight's own documented model,
- * witness output is never verified by the circuit itself; the circuit can
- * only check that whatever the witness returned was used consistently (see
- * the Phase 8 report's security-invariants section). Nothing here needs to,
- * or should, prove the secret is "real" in any identity sense — that is
- * exactly the property this design deliberately does not claim.
+ * — supplies the value at call time. Witness output is never verified by the
+ * circuit itself; the circuit only checks that whatever the witness returned
+ * was used consistently. Nothing here needs to, or should, prove the secret
+ * is "real" in any identity sense — that is exactly the property this design
+ * deliberately does not claim.
  */
 
 export type GatePrivateState = {

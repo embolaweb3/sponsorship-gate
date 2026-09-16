@@ -5,13 +5,10 @@ import CompactStandardLibrary;
 export sealed ledger poolId: Bytes<32>;
 export sealed ledger genesisTime: Uint<64>;
 export sealed ledger epochLength: Uint<64>;
-// PoW target compared against a 24-bit prefix of the registration hash (see
-// hashPrefix below). A full Bytes<32> hash cannot be widened to a Uint of any
-// practical width for a magnitude comparison: casting the whole 32-byte value
-// to Uint<64> (or wider) throws a runtime range error unless the hash's top
-// bits happen to already be zero with astronomically low probability. Working
-// with an explicit, narrow byte-prefix keeps the difficulty tunable and the
-// cast well-defined.
+// Compared against a 24-bit prefix of the registration hash (see
+// hashPrefix below), not the full 32-byte hash: casting a full Bytes<32>
+// to a wider Uint throws a runtime range error unless its top bits happen
+// to be zero, which a real hash essentially never satisfies.
 export sealed ledger powTarget: Uint<32>;
 export sealed ledger ownerKey: Bytes<32>;
 

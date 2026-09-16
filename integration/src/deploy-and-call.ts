@@ -10,10 +10,10 @@
 // line does not (a wallet-sdk-dust-wallet / midnight-js-contracts
 // WASM class-identity mismatch, per that repo's own notes).
 //
-// Single-party probe only, per this phase's staged scope: one wallet (Alice)
-// deploys, registers, and authorizes. The two-party sponsorship flow
-// (Bob unbalanced, Alice balancing) is explicitly out of scope until this
-// path is confirmed working end to end.
+// Single-party probe only: one wallet deploys, registers, and authorizes.
+// The two-party sponsorship flow (a second, unfunded wallet balanced by
+// this one) is a separate, not-yet-built step — see the README status
+// section.
 
 import fs from "node:fs";
 import path from "node:path";
@@ -268,7 +268,7 @@ async function main() {
     const finalized = await (deployed as any).callTx.authorize(0n);
     log(`  tx ${finalized.public.txId} in block ${finalized.public.blockHeight}`);
     const result = finalized.private?.result ?? finalized.result;
-    log(`  nullifier: ${result ? Buffer.from(result).toString("hex") : "(circuit return value not in the expected field — see report)"}`);
+    log(`  nullifier: ${result ? Buffer.from(result).toString("hex") : "(circuit return value not in the expected field)"}`);
   });
 
   try {

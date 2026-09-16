@@ -157,7 +157,7 @@ describe('pool management: ownership boundary', () => {
   });
 });
 
-describe('authorization binding: what the nullifier does and does not commit to (Phase 10)', () => {
+describe('authorization binding: what the nullifier does and does not commit to', () => {
   it('the nullifier is a pure function of (poolId, epoch, secret) — identical across two independently built transactions with no shared state', async () => {
     // Models two candidate transactions built independently (e.g. by two
     // different pieces of client code, or retried after a dropped
@@ -218,8 +218,8 @@ describe('authorization binding: what the nullifier does and does not commit to 
     // does not pass), described in the compiler's own help text as enabling
     // "data integrity for contract-to-contract calls." Combined with
     // `WalletFacade.balanceFinalizedTransaction` operating on an already
-    // *finalized* (immutable) transaction object (confirmed in Phase 9
-    // against the installed wallet-sdk types), a sponsor's approval is
+    // *finalized* (immutable) transaction object (confirmed against the
+    // installed wallet-sdk types), a sponsor's approval is
     // necessarily bound to the exact transaction object it was computed
     // over — there is no API surface, at the wallet-sdk or Compact level,
     // for substituting a transaction's other contents after that point.
@@ -240,7 +240,7 @@ describe('sponsor capacity / insufficient capacity boundary (documented, not con
     // This test documents a scope boundary rather than asserting a security
     // property: DUST accounting happens at the wallet/transaction layer, not
     // in this contract, so this circuit alone cannot observe "insufficient
-    // sponsor capacity." See the Phase 8 report for the off-chain component
+    // sponsor capacity." See sponsor-policy.ts for the off-chain component
     // that must check this before agreeing to co-sign a transaction.
     const sim = await GateSimulator.deploy(key(1), key(9), { powTarget: EASY_TARGET });
     await sim.register(mineNonce(key(1), EASY_TARGET));
