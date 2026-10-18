@@ -45,6 +45,21 @@ const S = {
   evidenceLoaded: false
 };
 
+// Theme: stored choice, else the OS preference. Storage can throw (private mode), so it is optional.
+function initTheme() {
+  let t: string | null = null;
+  try { t = localStorage.getItem("sg-theme"); } catch { /* storage blocked */ }
+  if (!t) t = matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+  document.documentElement.dataset.theme = t;
+}
+function toggleTheme() {
+  const next = document.documentElement.dataset.theme === "light" ? "dark" : "light";
+  document.documentElement.dataset.theme = next;
+  try { localStorage.setItem("sg-theme", next); } catch { /* storage blocked */ }
+  render();
+}
+initTheme();
+
 const $app = document.getElementById("app")!;
 const $toast = document.getElementById("toast-root")!;
 const esc = (s: unknown) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
@@ -727,7 +742,7 @@ function render() {
   <header class="top"><div class="wrap bar">
     <div class="brand"><svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#0b1020"/><path d="M9 22V14a7 7 0 0 1 14 0v8" fill="none" stroke="#7c9cff" stroke-width="3" stroke-linecap="round"/><circle cx="16" cy="20" r="2.5" fill="#00d4a8"/></svg>Sponsorship Gate</div>
     <nav class="tabs" role="tablist" aria-label="Sections">${TABS.map((t) => `<button role="tab" aria-selected="${S.tab === t.id}" data-go="${t.id}">${t.label}</button>`).join("")}</nav>
-    <div class="clock">${p ? `<span class="pill">epoch ${p.epoch}</span>` : ""}<span class="pill ${S.busy ? "warn" : "good"}">${S.busy ? esc(S.busy) : "sandbox · real circuits"}</span></div>
+    <div class="clock"><button class="icon" data-act="theme" aria-label="Switch to ${document.documentElement.dataset.theme === "light" ? "dark" : "light"} theme" title="Toggle theme">${document.documentElement.dataset.theme === "light" ? "☾" : "☀"}</button>${p ? `<span class="pill">epoch ${p.epoch}</span>` : ""}<span class="pill ${S.busy ? "warn" : "good"}">${S.busy ? esc(S.busy) : "sandbox · real circuits"}</span></div>
   </div></header>
   <main><div class="wrap ${S.enter ? "enter" : ""}">${view[S.tab]()}</div></main>
   <div class="wrap"><footer>Apache-2.0 · Midnight Buildathon Wave 2 · Sandbox runs the compiled <span class="mono">sponsorship-gate.compact</span>; the On-chain tab shows the devnet run.</footer></div>
@@ -810,6 +825,7 @@ document.addEventListener("click", async (ev) => {
     case "register": return m && register(m).then(render);
     case "auth": return m && authorize(m, BigInt(el.dataset.slot!)).then(render);
     case "epoch": return advanceEpoch();
+    case "theme": return toggleTheme();
     case "export": return exportSnapshot();
     case "path": S.showPath = !S.showPath; return render();
     case "lab": return runPrivacyLab();

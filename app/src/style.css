@@ -209,3 +209,10 @@ nav.tabs button { transition: color .2s, background .2s, box-shadow .25s; }
 button.copy { all: unset; display: block; cursor: copy; font: inherit; padding: 1px 4px; margin: 0 -4px; border-radius: 6px; transition: background .15s; }
 button.copy:hover, button.copy:focus-visible { background: color-mix(in srgb, var(--brand) 20%, transparent); }
 button.copy:focus-visible { outline: 2px solid var(--brand); }
+
+/* ===== Theme toggle ===== */
+button.icon { all: unset; cursor: pointer; width: 34px; height: 34px; display: grid; place-items: center; border-radius: 10px; border: 1px solid var(--glass-line); background: var(--glass); font-size: 16px; transition: transform .2s, border-color .2s; }
+button.icon:hover { transform: rotate(18deg); border-color: var(--brand); }
+button.icon:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+:root[data-theme="light"] .hero h1 { background: linear-gradient(120deg, #121a33 30%, #3c5bd6 70%, #00856b); -webkit-background-clip: text; background-clip: text; }
+:root[data-theme="light"] .tx { color: var(--text); }
