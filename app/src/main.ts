@@ -612,15 +612,15 @@ const view = {
     return `
     <div class="card" style="margin-bottom:16px">
       <h2>What the public ledger shows</h2>
-      <p class="muted small">This is everything an indexer, the sponsor, or any stranger can read. Note what's missing: names, secrets, and any edge between a commitment and a nullifier.</p>
+      <div class="row between"><p class="muted small" style="margin:0">This is everything an indexer, the sponsor, or any stranger can read. Note what's missing: names, secrets, and any edge between a commitment and a nullifier.</p><button class="btn sm" data-act="export">Download snapshot (JSON)</button></div>
       <div class="grid g3" style="margin-top:12px">
         <div class="card tight"><div class="stat"><b data-count="commit" data-to="${v.registered.length}">${v.registered.length}</b><span>commitments</span></div></div>
         <div class="card tight"><div class="stat"><b data-count="null" data-to="${v.nullifiers.length}">${v.nullifiers.length}</b><span>nullifiers spent</span></div></div>
         <div class="card tight"><div class="stat"><b class="hash" style="font-size:13px">${v.root !== undefined ? short(v.root.toString(16).padStart(64, "0"), 8) : "—"}</b><span>merkle root</span></div></div>
       </div>
       <div class="grid g2" style="margin-top:14px">
-        <div><h3>Registered commitments</h3><div class="tx">${v.registered.map((c, i) => `${i + 1}. ${short(hex(c), 14)}`).join("<br>") || "—"}</div></div>
-        <div><h3>Spent nullifiers</h3><div class="tx">${v.nullifiers.map((c, i) => `${i + 1}. ${short(hex(c), 14)}`).join("<br>") || "—"}</div></div>
+        <div><h3>Registered commitments <span class="muted small">· click to copy</span></h3><div class="tx">${v.registered.map((c, i) => `<button class="copy" data-copy="${hex(c)}" title="Copy full commitment">${i + 1}. ${short(hex(c), 14)}</button>`).join("") || "—"}</div></div>
+        <div><h3>Spent nullifiers</h3><div class="tx">${v.nullifiers.map((c, i) => `<button class="copy" data-copy="${hex(c)}" title="Copy full nullifier">${i + 1}. ${short(hex(c), 14)}</button>`).join("") || "—"}</div></div>
       </div>
       <div style="margin-top:14px">${anonMeter(v.registered.length, S.minMembers)}</div>
       <p class="small muted" style="margin-top:10px">Try to match a nullifier to a commitment. There is no information to do it with: the nullifier is a hash of (pool, epoch, slot, <em>secret</em>), and the secret is never published.</p>
@@ -760,7 +760,29 @@ function postRender() {
   });
 }
 
+function exportSnapshot() {
+  if (!S.pool) return;
+  const v = S.pool.view();
+  const snap = {
+    note: "Public ledger view of a Sponsorship Gate sandbox pool. Contains no secrets.",
+    epoch: String(S.pool.epoch), active: v.active, quota: String(v.quota), budget: String(v.budget), used: String(v.used),
+    merkleRoot: v.root !== undefined ? v.root.toString(16).padStart(64, "0") : null,
+    commitments: v.registered.map(hex), nullifiers: v.nullifiers.map(hex)
+  };
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(snap, null, 2)], { type: "application/json" }));
+  a.download = "sponsorship-gate-ledger-snapshot.json";
+  a.click();
+  URL.revokeObjectURL(a.href);
+  say(true, "Snapshot downloaded. It holds only public ledger data.");
+}
+
 document.addEventListener("click", async (ev) => {
+  const cp = (ev.target as HTMLElement).closest("[data-copy]") as HTMLElement | null;
+  if (cp) {
+    try { await navigator.clipboard.writeText(cp.dataset.copy!); say(true, "Copied to clipboard."); } catch { say(false, "Clipboard unavailable in this context."); }
+    return;
+  }
   const el = (ev.target as HTMLElement).closest("[data-act],[data-go]") as HTMLElement | null;
   if (!el) return;
   if (el.dataset.go) {
@@ -788,6 +810,7 @@ document.addEventListener("click", async (ev) => {
     case "register": return m && register(m).then(render);
     case "auth": return m && authorize(m, BigInt(el.dataset.slot!)).then(render);
     case "epoch": return advanceEpoch();
+    case "export": return exportSnapshot();
     case "path": S.showPath = !S.showPath; return render();
     case "lab": return runPrivacyLab();
     case "attack": return runAttack(ATTACKS.find((a) => a.id === el.dataset.id)!);

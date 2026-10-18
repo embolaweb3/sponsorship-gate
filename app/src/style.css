@@ -204,3 +204,8 @@ nav.tabs button { transition: color .2s, background .2s, box-shadow .25s; }
 .tree text.lab { fill: var(--text); }
 @keyframes draw { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
 .stat b span[data-count] { font-size: inherit; text-transform: none; color: inherit; letter-spacing: inherit; font-weight: inherit; }
+
+/* ===== Copyable values ===== */
+button.copy { all: unset; display: block; cursor: copy; font: inherit; padding: 1px 4px; margin: 0 -4px; border-radius: 6px; transition: background .15s; }
+button.copy:hover, button.copy:focus-visible { background: color-mix(in srgb, var(--brand) 20%, transparent); }
+button.copy:focus-visible { outline: 2px solid var(--brand); }
