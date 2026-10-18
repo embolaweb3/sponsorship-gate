@@ -184,10 +184,22 @@ nav.tabs button { transition: color .2s, background .2s, box-shadow .25s; }
 @media (prefers-reduced-motion: reduce) { .mesh i, .hero h1 { animation: none !important; } .enter > * { animation: none !important; } }
 
 /* ===== Activity timeline ===== */
-.timeline { list-style: none; margin: 0; padding: 0 0 0 14px; border-left: 1px solid var(--glass-line); max-height: 260px; overflow: auto; }
+.timeline { list-style: none; margin: 0; padding: 0 0 0 26px; max-height: 260px; overflow: auto; background: linear-gradient(var(--glass-line), var(--glass-line)) 5px 0 / 1px 100% no-repeat; }
 .timeline li { position: relative; padding: 4px 0 10px 16px; font-size: 13px; animation: rise .35s both; }
-.timeline li::before { content: ""; position: absolute; left: -20px; top: 9px; width: 11px; height: 11px; border-radius: 50%; background: var(--panel); border: 2px solid var(--brand); }
+.timeline li::before { content: ""; position: absolute; left: -26px; top: 9px; width: 11px; height: 11px; border-radius: 50%; background: var(--panel); border: 2px solid var(--brand); }
 .timeline li.k-register::before { border-color: var(--good); }
 .timeline li.k-authorize::before { border-color: var(--brand); background: var(--brand); }
 .timeline li.k-warn::before { border-color: var(--warn); }
 .timeline time { color: var(--muted); font-family: var(--mono); font-size: 11px; margin-right: 8px; }
+
+/* ===== Merkle tree figure ===== */
+.tree { width: 100%; height: auto; max-height: 300px; }
+.tree .edge { stroke: var(--glass-line); stroke-width: 1.5; fill: none; }
+.tree .node { fill: var(--panel-2); stroke: var(--glass-line); stroke-width: 1.5; }
+.tree .node.empty { stroke-dasharray: 3 3; fill: transparent; }
+.tree .node.root { stroke: var(--good); fill: var(--good-bg); }
+.tree .path .edge { stroke: var(--brand); stroke-width: 2.5; stroke-dasharray: 100; animation: draw .9s ease forwards; }
+.tree .path .node { stroke: var(--brand); fill: color-mix(in srgb, var(--brand) 22%, transparent); }
+.tree text { fill: var(--muted); font: 600 11px var(--sans); text-anchor: middle; }
+.tree text.lab { fill: var(--text); }
+@keyframes draw { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }

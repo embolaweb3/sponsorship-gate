@@ -29,6 +29,7 @@ const S = {
   busy: "" as string,
   enter: true,
   minMembers: 3,
+  showPath: false,
   activity: [] as { t: number; kind: string; text: string }[],
   attacks: {} as Record<string, Outcome>,
   inspector: {} as Record<string, Verdict>,
@@ -408,6 +409,32 @@ async function runAllAttacks() {
   runInspector();
 }
 
+/** 8-leaf illustration of the pool's Merkle tree (the real tree is depth 10). */
+function merkleSvg(n: number, mine: number | null, showPath: boolean): string {
+  const W = 560, H = 250, L = 8;
+  const xs = (lvl: number, i: number) => { const cnt = L >> lvl; return (W / cnt) * (i + 0.5); };
+  const ys = [215, 150, 85, 25];
+  const onPath = (lvl: number, i: number) => showPath && mine !== null && mine < L && (mine >> lvl) === i;
+  let edges = "", nodes = "";
+  for (let lvl = 0; lvl <= 3; lvl++) {
+    const cnt = L >> lvl;
+    for (let i = 0; i < cnt; i++) {
+      const x = xs(lvl, i), y = ys[lvl];
+      const filled = lvl === 0 ? i < n : (i << lvl) < n;
+      const p = onPath(lvl, i);
+      if (lvl > 0) for (const c of [2 * i, 2 * i + 1]) {
+        const cp = onPath(lvl - 1, c) && p;
+        edges += `<g class="${cp ? "path" : ""}"><path class="edge" pathLength="100" d="M${xs(lvl - 1, c)} ${ys[lvl - 1] - 12} L${x} ${y + 12}"/></g>`;
+      }
+      const cls = lvl === 3 ? "node root" : filled ? "node" : "node empty";
+      const label = lvl === 0 ? (p ? "you" : filled ? "m" + (i + 1) : "") : lvl === 3 ? "root" : "";
+      nodes += `<g class="${p ? "path" : ""}"><circle class="${cls}" cx="${x}" cy="${y}" r="${lvl === 3 ? 16 : 12}"/><text class="lab" x="${x}" y="${y + 4}">${label}</text></g>`;
+    }
+  }
+  const more = n > L ? `<text x="${W - 40}" y="245">+${n - L} more leaves</text>` : "";
+  return `<svg class="tree" viewBox="0 0 ${W} ${H}" role="img" aria-label="Merkle tree with ${n} members">${edges}${nodes}${more}</svg>`;
+}
+
 function anonMeter(n: number, min: number): string {
   const pct = Math.min(100, Math.round((n / Math.max(1, min)) * 100));
   const ok = n >= min;
@@ -579,6 +606,13 @@ const view = {
       <p class="small muted" style="margin-top:10px">Try to match a nullifier to a commitment. There is no information to do it with: the nullifier is a hash of (pool, epoch, slot, <em>secret</em>), and the secret is never published.</p>
     </div>
 
+    <div class="card" style="margin-bottom:16px">
+      <div class="row between"><div><h2>The membership tree</h2><p class="muted small" style="margin:0">Only the <b>root</b> is ever disclosed by <code>authorize</code>. Your path to it stays private.</p></div>
+      <button class="btn sm" data-act="path">${S.showPath ? "Hide" : "Reveal"} ${esc(member()?.name ?? "a member")}'s private path</button></div>
+      ${merkleSvg(v.registered.length, member() ? p.leafIndex(member()!.secret) : null, S.showPath)}
+      <p class="small muted" style="margin:0">Illustration shows 8 leaves; the deployed tree has 1,024. ${S.showPath ? "Highlighted: the private witness path. The circuit hashes it to the root inside the proof; observers only see the root." : ""}</p>
+    </div>
+
     <div class="card">
       <div class="row between"><div><h2>Linkability lab: Wave 1 vs Wave 2</h2><p class="muted small" style="margin:0">Same member, same flow, run on both contracts. Then search the public transcript of <code>authorize</code> for that member's commitment.</p></div>
       <button class="btn primary" data-act="lab" ${S.busy ? "disabled" : ""}>Run on ${esc(member()?.name ?? "a new member")}</button></div>
@@ -734,6 +768,7 @@ document.addEventListener("click", async (ev) => {
     case "register": return m && register(m).then(render);
     case "auth": return m && authorize(m, BigInt(el.dataset.slot!)).then(render);
     case "epoch": return advanceEpoch();
+    case "path": S.showPath = !S.showPath; return render();
     case "lab": return runPrivacyLab();
     case "attack": return runAttack(ATTACKS.find((a) => a.id === el.dataset.id)!);
     case "allattacks": return runAllAttacks();
