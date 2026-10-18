@@ -706,7 +706,7 @@ const view = {
           <tr><td class="muted">Observer view</td><td>${esc(JSON.stringify(e.observerView))}</td></tr>
           </tbody></table>
           <h3>Transactions</h3>
-          <table><thead><tr><th>Step</th><th>Block</th><th>Tx</th></tr></thead><tbody>${(e.steps ?? []).map((x: any) => `<tr><td>${esc(x.step)}</td><td>${esc(x.blockHeight)}</td><td class="hash">${short(esc(x.txId), 10)}</td></tr>`).join("")}</tbody></table>
+          <ol class="stepper">${(e.steps ?? []).map((x: any, i: number) => { const fee = (e.sponsoredTxs ?? []).find((_: any, j: number) => j === i - 1); return `<li><span class="dot">${i + 1}</span><div class="body"><b>${esc(x.step)}</b><div class="meta"><span class="pill">block ${esc(x.blockHeight)}</span>${fee ? `<span class="pill good">sponsor paid ${esc(Number(fee.fee).toLocaleString("en-US"))}</span>` : ""}<button class="copy hash" data-copy="${esc(x.txId)}" title="Copy tx id">${short(esc(x.txId), 10)}</button></div></div></li>`; }).join("")}</ol>
           <h3>Abuse attempts against the real chain</h3>
           <div class="tx">${(e.abuseAttempts ?? []).map((x: any) => `${x.refused ? "✓ refused" : "✗ NOT refused"}: ${esc(x.attempt)}<br>&nbsp;&nbsp;→ ${esc(x.message)}`).join("<br>")}</div>
           <h3>Sponsor decisions</h3>
