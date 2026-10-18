@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "compact": "compact compile --skip-zk src/sponsorship-gate.compact managed/sponsorship-gate",
-    "test": "vitest run"
+    "test": "vitest run",
+    "compact:control": "compact compile --skip-zk control/sponsorship-gate-v1.compact managed-v1/sponsorship-gate"
   },
   "dependencies": {
     "@midnight-ntwrk/compact-runtime": "^0.19.0"

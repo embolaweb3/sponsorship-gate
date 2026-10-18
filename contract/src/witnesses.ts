@@ -28,10 +28,32 @@ export function generateSecret(): Uint8Array {
   return bytes;
 }
 
+const TREE_DEPTH = 10;
+
+/** Placeholder returned when a secret's commitment is not in the Merkle tree.
+ * The witness may not throw a domain error of its own choosing here; it must
+ * return *a* path, and the circuit's `path.leaf == commitment` assertion then
+ * rejects it with the contract's own "not registered" message. */
+function absentPath() {
+  return {
+    leaf: new Uint8Array(32),
+    path: Array.from({ length: TREE_DEPTH }, () => ({ sibling: { field: 0n }, goes_left: false })),
+  };
+}
+
+/** Looks up the Merkle path for `leaf` in the pool's public `members` tree.
+ * The path is private witness data: it is hashed to a root inside the circuit
+ * and only the root is ever disclosed, which is what keeps `authorize` from
+ * revealing which member is acting. */
+export const memberPathWitness = (ctx: { privateState: GatePrivateState; ledger: any }, leaf: Uint8Array) =>
+  [ctx.privateState, ctx.ledger.members.findPathForLeaf(leaf) ?? absentPath()] as const;
+
+
 /** Witness map matching the contract's `mySecret` witness declaration. The
  * owner-only `ownerSecret` witness is intentionally not included here — pool
  * management is a separate concern with its own key material, wired up by
  * whoever deploys and administers a pool, not by ordinary sponsees. */
 export const sponseeWitnesses = {
+  memberPath: memberPathWitness,
   mySecret: (ctx: { privateState: GatePrivateState }) => [ctx.privateState, ctx.privateState.secretKey] as const,
 };

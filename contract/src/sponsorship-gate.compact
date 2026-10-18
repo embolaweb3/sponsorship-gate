@@ -11,24 +11,54 @@ export sealed ledger epochLength: Uint<64>;
 // to be zero, which a real hash essentially never satisfies.
 export sealed ledger powTarget: Uint<32>;
 export sealed ledger ownerKey: Bytes<32>;
+// Authorizations each member may draw per epoch (slots 0 .. quota-1).
+export sealed ledger quota: Uint<16>;
 
 export ledger active: Boolean;
+// Hard on-chain ceiling on total authorizations the pool will ever grant. The
+// contract cannot read a sponsor's DUST (that is wallet-layer state), so the
+// sponsor commits to a budget here instead; the owner can raise it (topUp).
+export ledger maxAuthorizations: Uint<64>;
+export ledger authorizedCount: Counter;
+
+// Every registered commitment, in a plain set. Used ONLY by `register` to
+// reject a duplicate. `authorize` must never query this set: a ledger query
+// on a witness-derived value is written into the public transcript, which
+// would publish exactly which member is authorizing (and link all of that
+// member's epochs together). Membership at authorize-time is instead proven
+// against `members`, below, without revealing the leaf.
 export ledger registered: Set<Bytes<32>>;
+// Merkle accumulator of the same commitments. `authorize` proves "my
+// commitment is a leaf under a recent root" and discloses only the root.
+export ledger members: HistoricMerkleTree<10, Bytes<32>>;
 export ledger spentNullifiers: Set<Bytes<32>>;
 
 witness mySecret(): Bytes<32>;
 witness ownerSecret(): Bytes<32>;
+witness memberPath(leaf: Bytes<32>): MerkleTreePath<10, Bytes<32>>;
 
-constructor(id: Bytes<32>, startTime: Uint<64>, epochSeconds: Uint<64>, target: Uint<32>, owner: Bytes<32>) {
+constructor(
+  id: Bytes<32>,
+  startTime: Uint<64>,
+  epochSeconds: Uint<64>,
+  target: Uint<32>,
+  owner: Bytes<32>,
+  slotsPerEpoch: Uint<16>,
+  budget: Uint<64>
+) {
   poolId = disclose(id);
   genesisTime = disclose(startTime);
   epochLength = disclose(epochSeconds);
   powTarget = disclose(target);
   ownerKey = disclose(owner);
+  quota = disclose(slotsPerEpoch);
+  maxAuthorizations = disclose(budget);
   active = true;
 }
 
-circuit regCommitment(secret: Bytes<32>): Bytes<32> {
+// Exported (and pure) so a client can compute its own leaf to look up its
+// Merkle path, without re-implementing the commitment hash off-circuit.
+export pure circuit commitmentOf(secret: Bytes<32>): Bytes<32> {
   return persistentCommit<Bytes<32>>(secret, pad(32, "sponsor:reg:v1:"));
 }
 
@@ -52,6 +82,14 @@ export circuit deactivate(): [] {
   active = false;
 }
 
+// Owner-only: raise the pool's authorization ceiling (e.g. after the sponsor
+// tops up their DUST). The ceiling can only go up; lowering it is `deactivate`.
+export circuit topUp(newMax: Uint<64>): [] {
+  assert(derivedOwnerKey(ownerSecret()) == ownerKey, "not pool owner");
+  assert(newMax > maxAuthorizations, "budget can only increase");
+  maxAuthorizations = disclose(newMax);
+}
+
 // Read-only helper so a client can search for a valid nonce (and tests can do
 // the same) without mutating ledger state on every failed attempt. Uses the
 // exact same hash/prefix path the enforcing check in `register` uses, so a
@@ -66,9 +104,10 @@ export circuit register(nonce: Bytes<32>): [] {
   const secret = mySecret();
   const powInput: Bytes<32> = persistentHash<Vector<3, Bytes<32>>>([pad(32, "sponsor:pow:v1:"), secret, nonce]);
   assert(hashPrefix(powInput) < powTarget, "pow requirement not met");
-  const commitment = disclose(regCommitment(secret));
+  const commitment = disclose(commitmentOf(secret));
   assert(!registered.member(commitment), "already registered");
   registered.insert(commitment);
+  members.insert(commitment);
 }
 
 circuit epochWindowOk(epoch: Uint<64>): Boolean {
@@ -77,19 +116,28 @@ circuit epochWindowOk(epoch: Uint<64>): Boolean {
   return blockTimeGte(disclose(start)) && blockTimeLt(disclose(end));
 }
 
-export circuit authorize(epoch: Uint<64>): Bytes<32> {
+export circuit authorize(epoch: Uint<64>, slot: Uint<16>): Bytes<32> {
   assert(active, "pool not active");
+  assert(slot < quota, "slot exceeds epoch quota");
+  assert(authorizedCount.lessThan(maxAuthorizations), "pool budget exhausted");
   assert(epochWindowOk(epoch), "epoch out of range for current block time");
   const secret = mySecret();
-  const commitment = regCommitment(secret);
-  assert(registered.member(commitment), "not registered");
-  const nullifier = disclose(persistentHash<Vector<4, Bytes<32>>>([
-    pad(32, "sponsor:auth:v1:"),
+  const commitment = commitmentOf(secret);
+  // Zero-knowledge membership: the Merkle path stays private; only the root
+  // it hashes to is disclosed, and the tree keeps recent roots valid so a
+  // member whose path predates later registrations is not locked out.
+  const path = memberPath(commitment);
+  assert(path.leaf == commitment, "not registered");
+  assert(members.checkRoot(disclose(merkleTreePathRoot<10, Bytes<32>>(path))), "not registered");
+  const nullifier = disclose(persistentHash<Vector<5, Bytes<32>>>([
+    pad(32, "sponsor:auth:v2:"),
     poolId,
     epoch as Field as Bytes<32>,
+    slot as Field as Bytes<32>,
     secret
   ]));
   assert(!spentNullifiers.member(nullifier), "already authorized this epoch");
   spentNullifiers.insert(nullifier);
+  authorizedCount.increment(1);
   return nullifier;
 }

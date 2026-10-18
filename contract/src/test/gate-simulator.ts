@@ -32,6 +32,8 @@ export type GateSimulatorOpts = {
   epochLength?: bigint;
   powTarget?: bigint;
   ownerPub?: Uint8Array;
+  quota?: bigint;
+  budget?: bigint;
   time?: number;
 };
 
@@ -59,6 +61,8 @@ export class GateSimulator {
       opts.epochLength ?? 3600n,
       opts.powTarget ?? 16_777_216n, // full 24-bit range = PoW effectively disabled unless overridden
       opts.ownerPub ?? new Uint8Array(32).fill(9),
+      opts.quota ?? 1n,
+      opts.budget ?? 1_000_000n,
     );
     const address = sampleContractAddress();
     const circuitContext = createCircuitContext(
@@ -104,6 +108,14 @@ export class GateSimulator {
     };
   }
 
+  /** Act as the pool owner (supplies the ownerSecret witness). */
+  switchOwner(ownerKey: Uint8Array) {
+    this.circuitContext.callContext.currentPrivateState = {
+      ...(this.circuitContext.callContext.currentPrivateState as GatePrivateState),
+      ownerKey,
+    };
+  }
+
   getLedger(): Ledger {
     return ledger(this.circuitContext.callContext.currentQueryContext.state);
   }
@@ -113,10 +125,15 @@ export class GateSimulator {
     this.circuitContext = res.context;
   }
 
-  async authorize(epoch: bigint): Promise<Uint8Array> {
-    const res = await (this.contract.impureCircuits.authorize as any)(this.circuitContext, epoch);
+  async authorize(epoch: bigint, slot = 0n): Promise<Uint8Array> {
+    const res = await (this.contract.impureCircuits.authorize as any)(this.circuitContext, epoch, slot);
     this.circuitContext = res.context;
     return res.result;
+  }
+
+  async topUp(newMax: bigint): Promise<void> {
+    const res = await (this.contract.impureCircuits.topUp as any)(this.circuitContext, newMax);
+    this.circuitContext = res.context;
   }
 
   async deactivate(): Promise<void> {
