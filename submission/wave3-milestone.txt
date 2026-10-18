@@ -1,10 +1,10 @@
-Wave 3: Preprod deployment and hardening.
+Wave 3: Preprod, a running sponsor service, and hardening.
 
-- Deploy Sponsorship Gate to Midnight Preprod using the wallet already funded this wave, completing the sync that stalled during initial testing.
-- Run the full register/authorize lifecycle on Preprod with real proofs, real transactions, and real block confirmations — this project's first LIVE-network evidence.
-- Add a withdrawal/reclaim circuit so a sponsor can recover unused pool capacity, closing a gap the MVP deliberately left out.
-- Address unbounded growth of the registered and spentNullifiers sets with a documented, tested epoch-based pruning or capacity policy.
-- Ship a minimal reference sponsor service that implements the transaction-inspection requirement as real, running code instead of a specified interface.
-- Publish reproducible setup instructions so a third party can verify every claim independently, without trusting our word for it.
+Delivered in Wave 2 and therefore no longer on this list: local deployment, the two-party sponsored flow, the sponsor-side transaction inspector, integration-layer abuse tests (including a sponsor with no DUST), reproducible setup instructions, and a pinned devnet stack.
 
-Deliverable: a Preprod-deployed, independently verifiable sponsorship pool.
+- Deploy Sponsorship Gate to Midnight Preprod and run the same register/authorize flow with real proofs and block confirmations. This is the project's first LIVE-network evidence. Needs a funded Preprod wallet; `TARGET=preprod npm run flow` already targets it.
+- Ship a reference sponsor service as long-running code around `inspectCandidate`: per-pool budgets, rate limits, structured refusal logs, health checks.
+- Epoch-partitioned nullifiers, so `spentNullifiers` stops growing without bound, with a documented and tested pruning policy.
+- A browser wallet (DApp connector) in the console, so it can drive a live pool and not only the in-browser sandbox.
+- Surface a minimum-anonymity-set policy in the console and the sponsor service, since the anonymity set is the pool's size.
+- An independent review of the contract and the inspector.

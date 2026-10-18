@@ -1,223 +1,279 @@
 # Sponsorship Gate
 
-Anonymous, rate-limited fee sponsorship for Midnight — a base-layer-native alternative to account-abstraction paymasters, built from Compact's commitment, nullifier, and disclosure primitives.
+Anonymous, rate-limited fee sponsorship for Midnight. A sponsor funds a pool; members prove membership in zero knowledge and draw a bounded number of sponsored actions per epoch. No one, including the sponsor, can link a request to a person or to that person's other requests.
+
+> **Wave 2 in one paragraph.** We found a privacy leak in our own Wave 1 contract (`authorize` published the caller's commitment in the public transcript), fixed it with a Merkle-membership proof, and proved the fix three ways: a transcript-level regression test, a control run on the preserved Wave 1 contract that *does* leak, and a byte-level check of real transactions on a devnet. We also shipped what Wave 1 only specified: a real two-party flow where an **unfunded** wallet's transactions are fee-balanced by a sponsor after it inspects them, and a web console that runs the real compiled circuits in the browser so you can try it with no wallet and no Docker.
+
+| | |
+|---|---|
+| **Try it now** | `cd app && npm install && npm run dev`, or the GitHub Pages build (see [Deploying the console](#deploying-the-console)). Click **Run the guided demo**. |
+| **Tests** | 34 contract tests · 20 sponsor-inspector tests · 8 browser end-to-end checks |
+| **Real devnet evidence** | [`integration/evidence-local.json`](integration/evidence-local.json): deploy + 3 sponsored transactions, with blocks, tx ids, fees |
+| **Pitch deck** | [`submission/Sponsorship-Gate-Wave2-Pitch-Deck.pptx`](submission/Sponsorship-Gate-Wave2-Pitch-Deck.pptx) |
+| **License** | Apache-2.0 ([`LICENSE`](LICENSE)) |
+
+---
+
+## Contents
+
+1. [The problem](#the-problem)
+2. [What changed since Wave 1](#what-changed-since-wave-1)
+3. [How to evaluate this submission](#how-to-evaluate-this-submission)
+4. [The privacy finding](#the-privacy-finding)
+5. [Architecture and Midnight integration](#architecture-and-midnight-integration)
+6. [The sponsor-side inspector](#the-sponsor-side-inspector)
+7. [Evidence, by tier](#evidence-by-tier)
+8. [Security model and limitations](#security-model-and-limitations)
+9. [Repository structure](#repository-structure)
+10. [Deploying the console](#deploying-the-console)
+11. [Roadmap](#roadmap)
+
+---
 
 ## The problem
 
-Letting a sponsor pay a stranger's transaction fee is a solved problem on transparent chains, and a badly-solved one. Ethereum's ERC-4337 paymasters make it possible, but the `paymasterAndData` field is public forever — anyone can see exactly which entity funded exactly which transaction for exactly which address. That linkability is serious enough that Ethereum's own community is actively working on fixes: a draft ERC ("privacyPaymaster") and a separate TEE-based design (GasLiteAA) both exist specifically to retrofit a privacy property the platform never had. Paymasters also face a well-documented griefing surface: a shared-storage validation step can be exploited to invalidate many unrelated operations at once, mitigated only by requiring paymasters to stake capital.
+A new user has no funds, so someone else must pay their first fee. On a transparent chain that payment is a permanent public record of who funded whom. Ethereum's ERC-4337 paymasters make sponsorship possible, but `paymasterAndData` is public forever, and the community is retrofitting privacy after the fact (a draft privacy-paymaster ERC; a TEE-based design).
 
-Sponsorship needs privacy for a structural reason, not a cosmetic one: the whole point of sponsoring a stranger's fee is to onboard them anonymously — tying the sponsorship to a public, permanent record of who funded whom defeats that purpose for both sides. And it needs abuse resistance, because "free to request" and "anonymous" combine into an obvious drain vector if nothing bounds it.
+Sponsorship needs three properties at once, and they pull against each other:
 
-## What this is
+* **Privacy.** The sponsor should not learn who they sponsored, and nobody should be able to group one person's requests.
+* **Abuse resistance.** Anonymous and free is an open drain. Each identity must cost something; each request must be bounded.
+* **Sponsor safety.** The sponsor pays real fees, so it must only ever pay for exactly the call it agreed to.
 
-A Compact contract plus a matching TypeScript test/tooling layer that lets a sponsor fund a pool of anonymous, rate-limited sponsorship slots: a user proves they've done real, verifiable work (proof-of-work, not identity) to register a slot once, then can draw one sponsored action per epoch from that slot — all without the sponsor ever learning who they are, and without the base ledger exposing a sponsor-to-user link the way a paymaster field does.
+Neither proof-of-work-as-Sybil-cost (Dwork-Naor, 1992) nor epoch-scoped nullifier rate limiting (the shape of RLN) is new cryptography, and we claim no novelty there. The contribution is the composition, where it sits in Midnight's stack, and the discipline of testing the privacy claim at the level it is actually made.
 
-This is not a new cryptographic primitive. Proof-of-work as a Sybil-cost gate (Dwork–Naor, 1992) and epoch-scoped nullifier rate-limiting (the same shape as RLN) are both established techniques. The contribution is the composition, and specifically where it sits in the stack: Midnight already keeps its native fee-capacity resource (DUST) shielded and structurally separate from the value being moved, and exposes third-party fee-balancing (a wallet can balance a transaction using another wallet's DUST secret keys) as a base primitive rather than an application-level retrofit. This project is what a sponsorship coordination layer looks like when it is built to use that, instead of reimplementing a paymaster pattern on top of a chain that was never built for it.
+## What changed since Wave 1
 
-## Why Midnight specifically
+| Area | Wave 1 | Wave 2 |
+|---|---|---|
+| **Privacy of `authorize`** | Leaked the member's commitment in the public transcript (not caught by any Wave 1 test) | Merkle-membership proof; only a root is disclosed. Transcript-level regression tests + a control contract that demonstrates the Wave 1 leak |
+| **Rate limiting** | One authorization per member per epoch | `authorize(epoch, slot)`: a configurable quota of independent single-use slots per epoch |
+| **Sponsor budget** | Off-chain accounting only | On-chain `maxAuthorizations` ceiling + counter, owner `topUp` (increase-only) |
+| **Deployment** | Never completed | Deployed and exercised on a local devnet; root cause of Wave 1's hang found and fixed (see [below](#why-wave-1-never-deployed)) |
+| **Two-party sponsorship** | Specified in prose | Running code: an unfunded sponsee's transactions, balanced and submitted by the sponsor |
+| **Sponsor-side check** | An interface comment | `inspectCandidate`: 6 refusal classes, 20 unit tests, exercised against a real `ContractDeploy` |
+| **Frontend** | None | Web console running the real compiled circuits in-browser (sponsor / member / observer / attack lab / on-chain evidence) |
+| **Tests** | 16 simulated | 34 contract + 20 inspector + 8 browser e2e, plus a real-devnet run with abuse attempts |
+| **Licensing** | README referenced a missing `LICENSE` | `LICENSE` (Apache-2.0) added |
 
-Three things this design leans on that a transparent chain doesn't offer natively:
+## How to evaluate this submission
 
-* **A shielded, non-transferable fee-capacity resource (DUST)** decoupled from the value-carrying asset (NIGHT) at the protocol level, not the application level.
-* **Third-party transaction balancing as a base wallet primitive** (`WalletFacade.balanceFinalizedTransaction`) — a sponsor's wallet can fee-balance a transaction it did not construct, using its own keys, without needing a bespoke "sponsor role" anywhere in the protocol.
-* **Compile-time-tracked information flow** (`disclose()`): a Compact contract cannot leak witness-derived data into public state by accident. The compiler enforces the private/public boundary this design depends on.
+Three levels, from no setup to full setup. Each is independent.
 
-## Status
+### 1. The console (no wallet, no Docker, no server)
 
-This is a research-and-build project at an intermediate stage. Three tiers are used precisely throughout this repository:
+```bash
+cd app
+npm install
+npm run dev          # http://localhost:5173
+```
 
-* **SIMULATED** — executed against the compiled Compact circuit directly (`--skip-zk`, no network).
-* **LOCAL** — executed against a real, running local Midnight devnet (real node, indexer, proof server).
-* **LIVE** — executed against a real public network (Preprod or mainnet).
+* **Overview → Run the guided demo.** Deploys a pool, registers three members, authorizes each, and drops you on the Observer tab.
+* **Observer → Linkability lab.** The same member, the same flow, run on the Wave 1 contract and the Wave 2 contract. The Wave 1 transcript contains the member's commitment (highlighted); the Wave 2 transcript does not.
+* **Attack lab → Run all.** Ten attacks on fresh pools (replay, outsider, over-quota, skipped PoW, double registration, future epoch, budget drain, non-owner `topUp`, lowering the budget, using a closed pool). A pass means the circuit *refused*: no proof exists, so no transaction would be made.
+* **Sponsor → Run all candidates.** The sponsor's inspector verdict on nine candidate transactions.
+* **On-chain.** The devnet evidence.
 
-### Verified SIMULATED
+Everything the sandbox does is executed by the compiled `sponsorship-gate.compact` circuits (the same generated module the contract tests run), not by a re-implementation.
 
-* **16/16 tests passing** against the compiled circuit, including the adversarial authorization-binding suite.
-
-The tests cover PoW registration, epoch and pool scoping, replay resistance, ownership, inactive-pool behavior, authorization races, and related security invariants.
-
-### Verified LOCAL
-
-* A real local Midnight devnet (node, indexer, proof server) was run and confirmed healthy.
-* A wallet was genuinely funded with NIGHT and DUST through real local-chain transactions, with real transaction IDs and block heights.
-* The wallet/DUST infrastructure and `balanceFinalizedTransaction` sponsorship mechanism were located and confirmed to exist in the installed SDK through direct inspection of its type signatures.
-* Contract deployment to the local devnet was attempted but did not complete before submission.
-
-A funded wallet is not the same as a deployed application. There is currently no contract address, deployment transaction, or on-chain `register`/`authorize` call.
-
-### Not yet demonstrated
-
-* No LOCAL contract deployment.
-* No LOCAL or LIVE sponsored transaction.
-* No Preprod or mainnet deployment.
-* No end-to-end two-party sponsorship flow.
-* No complete proof-generation flow through a deployed application.
-
-Nothing above is represented as completed elsewhere in this README.
-
-## The sponsorship model
-
-This is not a Midnight "sponsor API" — there isn't one.
-
-The verified mechanism is generic transaction balancing:
-
-`WalletFacade.balanceFinalizedTransaction(tx, secretKeys, options)`
-
-This allows a wallet to fee-balance a transaction using its own DUST secret keys, regardless of who constructed the transaction's other contents.
-
-"Sponsorship" here means that a sponsor's wallet balances a transaction it did not construct after independently verifying that the transaction contains a legitimate authorization.
-
-The repository has confirmed this mechanism exists in the installed SDK, but the complete two-party sponsorship flow has **not** yet been executed end to end.
-
-## PoW-gated anonymous registration
-
-A user who wants a sponsorship slot generates a local secret that is never transmitted and solves a small proof-of-work puzzle bound to that secret:
-
-`hash(domain, secret, nonce) < difficulty target`
-
-The contract checks a 24-bit hash prefix because a full 256-bit hash cannot be practically narrowed into the Compact integer range used for the comparison.
-
-Registration inserts a commitment to the secret into a public set, once.
-
-The PoW step exists because a freely regeneratable secret would make downstream rate limiting meaningless: an attacker could simply mint a fresh identity for every request. PoW raises the cost of creating identities through computation rather than money or real-world identity checks.
-
-It provides bounded Sybil resistance, not personhood verification and not elimination of Sybil behavior.
-
-## Epoch-scoped nullifier rate limiting
-
-Once registered, a secret can draw one sponsored authorization per epoch per pool.
-
-`authorize(epoch)` derives a nullifier from:
-
-`(poolId, epoch, secret)`
-
-It checks that the nullifier has not already been spent and consumes it.
-
-The same secret can authorize again in a later epoch because the epoch is part of the nullifier preimage.
-
-This is the same general rate-limiting shape used by RLN; no cryptographic novelty is claimed here.
-
-## Trust boundary
-
-The authorization-binding review is a load-bearing part of the design.
-
-* `authorize()` commits to `(poolId, epoch, secret)` only.
-* Two independently built transactions authorizing the same secret for the same epoch therefore produce the **same nullifier**.
-* A bare nullifier is not, by itself, proof that a particular candidate transaction is the transaction that produced it.
-* A sponsor must therefore verify that the transaction it is about to fee-balance **itself contains a fresh authorization effect for the relevant pool**, rather than trusting an out-of-band nullifier.
-
-Transaction-payload substitution after sponsorship balancing begins is handled by Midnight's transaction model rather than by a bespoke application-level transaction hash. Compact's compiler includes a contract communications commitment by default, and `balanceFinalizedTransaction` operates on a finalized transaction object.
-
-The sponsor does not receive the sponsee's registration secret or a wallet-to-secret mapping.
-
-## What remains private / what is public
-
-### Private
-
-* The sponsee's registration secret.
-* The mapping between a wallet and the commitment/nullifier it produced.
-* Application data that the contract does not explicitly disclose.
-
-### Public
-
-* Pool configuration, including owner commitment, epoch length, and PoW target.
-* Registered commitments.
-* Spent nullifiers.
-* Pool activation state.
-
-The commitments and nullifiers are designed so that they do not directly reveal the underlying secret or wallet relationship.
-
-## Contract architecture
-
-`contract/src/sponsorship-gate.compact` — the on-chain sponsorship gate.
-
-* `register(nonce)` — PoW-gated, one-time commitment insertion.
-* `authorize(epoch)` — epoch-window checked, nullifier-gated authorization.
-* `deactivate()` — owner-only pool deactivation using the commitment pattern.
-* `checkPow` / `derivedOwnerKey` — exported pure circuits for client-side PoW and owner-commitment computation.
-
-The contract deliberately does **not** read or move DUST. DUST handling belongs to the wallet and transaction layer.
-
-## Off-chain sponsorship policy
-
-`contract/src/sponsor-policy.ts` contains the off-chain sponsorship decision layer.
-
-It provides budget-tracking logic and documents the required authorization verification boundary for a real sponsor service.
-
-It is intentionally not presented as a live wallet/indexer integration.
-
-## Real Midnight primitives used
-
-* `persistentCommit` / `persistentHash` with explicit domain separation.
-* `Set<Bytes<32>>` ledger state for registered commitments and spent nullifiers.
-* `blockTimeGte` / `blockTimeLt` for epoch-window verification.
-* `disclose()` compile-time information-flow tracking.
-* Compact's default contract communications commitment.
-* `WalletFacade.balanceFinalizedTransaction` for third-party fee balancing.
-
-## Security invariants
-
-The following are tested **SIMULATED** against the compiled circuit:
-
-* A PoW solution is bound to one specific secret.
-* A secret cannot register twice.
-* A secret can authorize at most once per epoch per pool.
-* The same secret can authorize again in a later epoch.
-* Authorizations cannot replay across independently deployed pools.
-* Two independently built candidates for the same secret/epoch produce the same nullifier.
-* Competing authorizations collapse to the same canonical nullifier/replay path.
-* An unregistered secret cannot authorize.
-* An inactive pool rejects registration and authorization.
-* Only the genuine owner secret can deactivate a pool.
-* The contract has no visibility into sponsor DUST balance; fee capacity remains a wallet/transaction-layer concern.
-
-**16/16 tests passing.**
-
-## Limitations
-
-* Contract deployment to a running LOCAL devnet was not completed.
-* The two-party sponsored transaction flow was not executed end to end.
-* No Preprod or mainnet deployment exists.
-* Complete proof generation through a deployed application flow has not been demonstrated.
-* Sybil resistance is bounded by proof-of-work rather than identity.
-* PoW-as-Sybil-cost and epoch-scoped nullifier rate limiting are established techniques; the contribution is their Midnight-native composition and the surrounding trust-boundary design.
-* `registered` and `spentNullifiers` grow without bound.
-* There is no withdrawal/reclaim circuit.
-* Owner authorization currently uses a hash-based commitment rather than a dedicated signature scheme.
-* A real sponsor service must correctly inspect the candidate transaction's own authorization effect; this repository does not yet implement that live transaction inspection.
-
-## Running it
-
-Requires the [Compact toolchain](https://docs.midnight.network/getting-started/installation) and Node.js.
+### 2. The tests (needs the [Compact toolchain](https://docs.midnight.network/getting-started/installation) and Node 24)
 
 ```bash
 cd contract
 npm install
-npm run compact
-npm test
+npm run compact           # compile (skips ZK key generation)
+npm run compact:control   # compile the preserved Wave 1 contract (for the leak control test)
+npm test                  # 34 tests
+
+cd ../integration
+npm test                  # 20 sponsor-inspector tests, no install needed
+
+cd ../app
+npm run build && npm run preview &
+CHROME_PATH=/path/to/chrome npm run e2e     # 8 browser checks
 ```
 
-`npm test` runs the SIMULATED adversarial test suite.
+### 3. The real devnet flow (needs Docker; ~5 minutes)
 
-The `integration/` directory contains experimental deployment wiring targeting the Midnight local devnet and Preprod. It is **not part of the verified test suite and has not produced a successful contract deployment**. Running it requires the corresponding Midnight infrastructure and funded credentials.
+```bash
+docker compose -f infra/devnet/standalone.yml --env-file infra/devnet/standalone.env up -d
+
+cd integration
+npm install
+npm run compact           # compiles with 0.31.1 *with* proving keys (what midnight-js 4.1.1 expects)
+npm run flow              # writes integration/evidence-local.json
+```
+
+`npm run flow`, in order:
+
+1. Builds a funded **sponsor** wallet and deploys the pool (quota 2, budget 5).
+2. Creates a **sponsee** with no NIGHT, no DUST, and no wallet. It mines the proof-of-work, builds and proves `register`, then `authorize` for slots 0 and 1. For each, the wallet provider hands the candidate to the sponsor, which runs `inspectCandidate`, balances with its own DUST, and submits.
+3. **Abuse attempts against the real chain:** a third authorization (quota), a replay, a sponsee asking the sponsor to pay for an unrelated contract *deployment*, and a registration through a sponsor with no DUST.
+4. **A byte-level privacy check:** searches each submitted transaction's actual bytes for the sponsee's commitment. `register` must contain it (the positive control: the method can see it) and `authorize` must not.
+
+The last committed run's output is in `integration/evidence-local.json` and rendered on the console's **On-chain** tab.
+
+## The privacy finding
+
+Wave 1's `authorize` checked membership with `registered.member(commitment)`. The compiler accepted it, because the commitment is a hash and not raw witness data, so `disclose()` is not required. But a ledger **query** is not free of public effects: its argument is written into the call's **public transcript**. Reading the generated code confirms it: `_authorize_0` pushes the commitment with `storage: false` and then runs `member`, and that push is part of the transcript every node and indexer sees.
+
+Consequence: every `authorize` call published the caller's commitment, so anyone could group all of one member's requests and tie them to their registration. This is exactly the linkability the design claims to prevent.
+
+Wave 1's 16 tests passed because they assert on *ledger state*, and a query changes no state. The finding is a reminder that for a privacy claim, the transcript is the artifact to test.
+
+**The fix.** `members` is a `HistoricMerkleTree<10, Bytes<32>>`. `authorize` takes the member's Merkle path from a witness, hashes it to a root inside the circuit, asserts `path.leaf == commitment`, and discloses **only the root**. A plain `Set` remains solely for `register`'s duplicate check, where the commitment is public anyway.
+
+**How we know the test can fail** ([`contract/src/test/privacy.test.ts`](contract/src/test/privacy.test.ts), [`privacy-control.test.ts`](contract/src/test/privacy-control.test.ts)):
+
+* `register`'s transcript *does* contain the commitment (sanity: the detector can see commitments at all).
+* Wave 2 `authorize`'s transcript does not contain the commitment or the secret.
+* The identical check against the preserved Wave 1 contract ([`contract/control/sponsorship-gate-v1.compact`](contract/control/sponsorship-gate-v1.compact)) *finds* the commitment. If it didn't, the Wave 2 assertion would prove nothing.
+* On the devnet, the same byte search over the real submitted transactions: found in `register`, absent from both `authorize` calls.
+
+## Architecture and Midnight integration
+
+```mermaid
+flowchart LR
+  subgraph Sponsee["Sponsee (private state)"]
+    S[secret] --> W["witnesses: mySecret, memberPath"]
+  end
+  subgraph Contract["sponsorship-gate.compact (public ledger)"]
+    R[register] --> SET["registered: Set"]
+    R --> TREE["members: HistoricMerkleTree"]
+    A["authorize(epoch, slot)"] --> TREE
+    A --> NUL["spentNullifiers: Set"]
+    A --> CNT["authorizedCount / maxAuthorizations"]
+    O["topUp / deactivate (owner)"] --> CNT
+  end
+  W -->|proves| R
+  W -->|proves| A
+  Sponsee -->|candidate tx| INS{"inspectCandidate"}
+  INS -->|ok| BAL["balanceUnboundTransaction (sponsor DUST)"]
+  INS -->|refuse| X[nothing spent]
+  BAL --> CHAIN[(Midnight)]
+```
+
+### Dual-ledger model
+
+| Public ledger (on-chain) | Private state (off-chain, never published) |
+|---|---|
+| Pool config (`poolId`, epoch length, PoW target, owner key, quota) | The member's secret |
+| Registered commitments, Merkle tree + roots | The member's Merkle path |
+| Spent nullifiers | The owner's secret |
+| `authorizedCount`, `maxAuthorizations`, `active` | PoW nonce |
+
+### Circuits
+
+| Circuit | Who | What it enforces |
+|---|---|---|
+| `register(nonce)` | member | pool active; `H(pow‖secret‖nonce)` 24-bit prefix `<` target; commitment not already registered; inserts into the Set and the tree |
+| `authorize(epoch, slot)` | member | pool active; `slot < quota`; `authorizedCount < maxAuthorizations`; epoch matches block time; Merkle membership (root disclosed only); nullifier `H(pool, epoch, slot, secret)` unspent; spends it; increments the counter |
+| `topUp(newMax)` | owner | owner secret; `newMax > maxAuthorizations` (increase-only) |
+| `deactivate()` | owner | owner secret; closes the pool |
+| `checkPow`, `derivedOwnerKey`, `commitmentOf` | pure, exported | client-side helpers that share the contract's exact hashing, so a nonce accepted off-chain is accepted on-chain |
+
+### Midnight primitives used
+
+* `HistoricMerkleTree`, `merkleTreePathRoot`, `checkRoot`: zero-knowledge membership with recent roots kept valid.
+* `persistentCommit` / `persistentHash` with explicit domain separation.
+* `Set`, `Counter` ledger types; `blockTimeGte` / `blockTimeLt` for epoch windows.
+* `disclose()` information-flow tracking, used deliberately: the only disclosed values in `authorize` are the Merkle root and the nullifier.
+* **DUST** as a shielded, non-transferable fee resource separate from NIGHT, which is what lets a third party pay without the payment being a field every observer reads.
+* **Third-party balancing**: `WalletFacade.balanceUnboundTransaction` with the sponsor's keys, on a transaction the sponsor did not build.
+
+The contract deliberately does **not** read or move DUST. It enforces a budget the sponsor commits to on-chain; the DUST itself is a wallet-layer concern.
+
+## The sponsor-side inspector
+
+`authorize` commits to `(pool, epoch, slot, secret)` and nothing about the transaction it travels in. A nullifier therefore proves nothing about the *candidate* a sponsor is about to pay for. Wave 1's review identified this and only specified a check; Wave 2 implements it ([`integration/src/lib/sponsor-inspector.ts`](integration/src/lib/sponsor-inspector.ts)).
+
+| Code | Refuses |
+|---|---|
+| `NOT_A_CALL` | A smuggled contract deployment or maintenance update (**exercised against a real `ContractDeploy` on the devnet**) |
+| `TOO_MANY_ACTIONS` | A bundle of calls, to inflate the sponsored fee |
+| `WRONG_CONTRACT` | A valid-looking call to some other contract |
+| `ENTRY_POINT_NOT_SPONSORED` | `topUp` / `deactivate`: owner-only, never something a sponsor pays a stranger for |
+| `HAS_ZSWAP_MOVEMENT` | A candidate that also moves shielded value: a sponsor pays fees, not transfers |
+| `NULLIFIER_ALREADY_SPENT` | A replay that would fail on-chain *after* the sponsor had paid |
+
+The file has no Node or browser dependencies, so the **same function** runs in the devnet sponsor service, the unit tests, and the web console. Midnight's contract-communications commitment then prevents the payload being swapped after the check.
+
+## Evidence, by tier
+
+Terms are used precisely. Nothing is claimed at a higher tier than it has reached.
+
+* **SIMULATED**: executed against the compiled circuit with no network (`--skip-zk`).
+* **LOCAL**: executed against a real local node, indexer and proof server.
+* **LIVE**: executed against a public network (Preprod / mainnet).
+
+| Tier | Evidence |
+|---|---|
+| **SIMULATED** | 34 contract tests: the 16 Wave 1 invariants (re-passing on the new contract), 13 feature/membership tests (quota, budget, `topUp`, historic roots, outsiders, cross-pool), 4 transcript-privacy tests, 1 Wave 1 control. 20 inspector unit tests. 8 browser end-to-end checks in headless Chrome. |
+| **LOCAL** | A real pool deployment and 3 sponsored transactions (register + 2 authorize) by an unfunded sponsee, paid by the sponsor, with real proofs; abuse attempts refused (quota, replay, smuggled deploy, sponsor with no DUST); byte-level privacy check over the real transactions. Ids in `integration/evidence-local.json`. |
+| **LIVE** | **None yet.** No Preprod or mainnet deployment. `TARGET=preprod npm run flow` runs the same script given a funded Preprod wallet in `integration/.preprod-seed` (git-ignored). |
+
+### Why Wave 1 never deployed
+
+Wave 1's deployment attempt reached "proof generated, transaction balanced, submitted" and then hung with no error and no block. The cause was a **version mismatch**, found by comparing against a working reference stack: the containers in use were node 1.0.0 / indexer 4.3.3 / proof-server 8.1.0, newer than the ledger the stable SDK line (midnight-js 4.1.1, ledger-v8 8.1.2, wallet-sdk-facade 4.1.0) speaks, and the node dropped the transactions silently. The set that line was validated against is node **0.22.3** + indexer **4.0.0**. [`infra/devnet/standalone.yml`](infra/devnet/standalone.yml) pins it, with the reason beside it.
+
+## Security model and limitations
+
+* **Anonymity set = the pool's size.** The disclosed root identifies a snapshot, so a member is hidden among those registered at that snapshot. A one-member pool hides nothing. Pool operators should publish a minimum size before sponsoring.
+* **Sybil resistance is bounded by proof-of-work, not by identity.** It raises the cost of minting identities; it does not eliminate them. The on-chain budget bounds the sponsor's total exposure regardless.
+* **The contract cannot see DUST.** `maxAuthorizations` is a commitment the sponsor makes, not a read of their balance.
+* **`registered` and `spentNullifiers` grow without bound.** An epoch-partitioned scheme is Wave 3 work.
+* **Merkle tree depth is 10 (1,024 members).** Pools that expect more need a larger tree; this is a compile-time constant.
+* **Owner authorization is a hash commitment, not a signature scheme.** Acceptable for a single owner key; not for delegated administration.
+* **The nullifier is unlinkable to the commitment, but timing is not hidden.** A pool with one request per day tells an observer when that request happened.
+* **The sandbox is a sandbox.** It runs the real circuits against an in-memory ledger. The on-chain evidence is the devnet run, not the browser.
+* **No external audit.** The privacy finding above came from our own review; a third-party review is on the roadmap.
 
 ## Repository structure
 
 ```text
 contract/
-  src/sponsorship-gate.compact   on-chain sponsorship gate
-  src/witnesses.ts                private witness implementation
-  src/pow.ts                      PoW nonce mining
-  src/sponsor-policy.ts           sponsor decision/policy layer
-  src/test/                       simulator and adversarial tests
+  src/sponsorship-gate.compact     the pool contract
+  src/witnesses.ts                 mySecret + memberPath witnesses (memberPath reads the public tree)
+  src/pow.ts                       PoW mining helper
+  src/test/                        simulator, 34 tests, transcript helpers
+  control/sponsorship-gate-v1.compact   the Wave 1 contract, preserved verbatim as a leak control
 
 integration/
-  src/deploy-and-call.ts          deployment/integration experiment
-  src/print-preprod-address.ts    Preprod wallet address utility
+  src/sponsored-flow.ts            the real two-party devnet flow (+ abuse attempts, privacy check)
+  src/lib/sponsor-inspector.ts     the inspector (dependency-free; shared with the console)
+  src/lib/chain.ts                 wallet / network wiring
+  src/test/inspector.test.ts       20 unit tests
+  evidence-local.json              output of the last devnet run
+  src/deploy-and-call.ts           Wave 1's single-party probe; targets the Wave 1 contract, kept for history
+
+app/                               web console (Vite + TypeScript, no framework)
+  src/engine.ts                    runs the compiled circuits in the browser
+  src/generated/                   compiled JS modules (v2 = this wave, v1 = control); `npm run sync-contract`
+  e2e/console.e2e.mjs              browser end-to-end test
+
+infra/devnet/standalone.yml        version-pinned node + indexer + proof server
+submission/                        decks, build scripts, milestone notes
 ```
+
+## Deploying the console
+
+`.github/workflows/pages.yml` runs the inspector tests, builds `app/`, and publishes it to GitHub Pages on every push to `main` that touches the app. In the repository settings, set **Pages → Source** to **GitHub Actions**. The build uses relative asset paths, so it works under any repository path. The compiled contract modules are committed under `app/src/generated/`, so the build needs no Compact toolchain.
+
+To refresh them after changing the contract: `npm run compact && npm run compact:control` in `contract/`, then `npm run sync-contract` in `app/`.
+
+## Roadmap
+
+**Wave 3**
+
+* Preprod deployment with the same `npm run flow`, and a funded wallet.
+* A reference sponsor *service* (long-running, per-pool budgets, rate limits) built around `inspectCandidate`.
+* Epoch-partitioned nullifiers so the spent set stops growing without bound.
+* A browser wallet (DApp connector) so the console can drive a live pool, not only the sandbox.
+* Minimum-anonymity-set policy surfaced in the console.
+* An independent review of the contract and the inspector.
 
 ## License
 
-This project is licensed under the **Apache License 2.0**. See the [`LICENSE`](LICENSE) file for the complete license text.
+Apache License 2.0. See [`LICENSE`](LICENSE).
 
 SPDX-License-Identifier: Apache-2.0

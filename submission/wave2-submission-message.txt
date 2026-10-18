@@ -1,0 +1,22 @@
+Wave 2: we found a privacy leak in our own contract, fixed it, and proved the fix on a real chain.
+
+Sponsorship Gate is anonymous, rate-limited fee sponsorship for Midnight. A sponsor funds a pool; members prove membership in zero knowledge and draw a bounded number of sponsored actions per epoch, so nobody, including the sponsor, can link a request to a person or to that person's other requests.
+
+WHAT WE FOUND. Wave 1's authorize() checked membership with a ledger query. A query's argument is written into the call's public transcript, so every authorize published the caller's commitment and let anyone group all of a member's requests. Our 16 passing tests could not see it: they assert on ledger state, and a query changes none. We confirmed it in the generated code, then fixed it.
+
+THE FIX AND HOW WE KNOW IT WORKS. Membership is now a Merkle proof; only the root is disclosed. Three independent checks: (1) transcript-level regression tests; (2) a control run of the identical check on the preserved Wave 1 contract, which finds the commitment, so the test is capable of failing; (3) on a real devnet, a byte-level search of the actual submitted transactions: the commitment is in register (the positive control) and absent from both authorize calls.
+
+WHAT WE SHIPPED
+- Contract: per-epoch quota slots; an on-chain authorization budget the sponsor commits to (the contract cannot read DUST) with increase-only owner topUp.
+- A real two-party flow on a local devnet. A sponsee with no NIGHT, no DUST and no wallet registered and authorized; the sponsor inspected each candidate transaction, balanced it with its own DUST, and submitted it. Sponsee fees paid: 0.
+- A sponsor-side inspector that refuses smuggled contract deploys (exercised against a real ContractDeploy), bundled calls, foreign contracts, owner-only entry points, shielded movement and replayed nullifiers. A sponsor with no DUST fails with Wallet.InsufficientFunds and leaves no trace in the pool.
+- A web console that runs the real compiled circuits in the browser, with no wallet and no Docker: a guided demo, a linkability lab (Wave 1 vs Wave 2 on the same member), a ten-attack lab, the sponsor inspector, and the devnet evidence.
+- 34 contract tests, 20 inspector tests, 8 browser end-to-end checks.
+
+WHY WAVE 1 NEVER DEPLOYED. The transactions were dropped silently by a node newer than the SDK's ledger (node 1.0.0 / indexer 4.3.3). The pinned set the SDK line is validated against is node 0.22.3 / indexer 4.0.0. infra/devnet/standalone.yml pins it, with the reason beside it.
+
+WHERE WE ARE, PLAINLY. SIMULATED and LOCAL are done and reproducible (README, "How to evaluate"). LIVE is not: there is no Preprod or mainnet deployment yet; the same script runs against Preprod given a funded wallet. The anonymity set is the pool's size, so a one-member pool hides nothing, and the README says so.
+
+NEXT. Preprod, a long-running reference sponsor service, epoch-partitioned nullifiers, a browser wallet connector, and an independent review.
+
+Private sponsorship should be a protocol primitive, not an identity leak.

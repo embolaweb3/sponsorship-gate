@@ -5,7 +5,8 @@ import os
 from pptx import Presentation
 from pptx.util import Emu, Inches
 
-path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Sponsorship-Gate-Pitch-Deck.pptx")
+import sys
+path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(os.path.abspath(__file__)), "Sponsorship-Gate-Pitch-Deck.pptx")
 prs = Presentation(path)
 SW, SH = prs.slide_width, prs.slide_height
 
