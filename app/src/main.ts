@@ -28,6 +28,7 @@ const S = {
   sel: 0,
   busy: "" as string,
   enter: true,
+  minMembers: 3,
   attacks: {} as Record<string, Outcome>,
   inspector: {} as Record<string, Verdict>,
   lab: undefined as
@@ -350,7 +351,7 @@ class MaintenanceUpdate {}
 const SPENT = "ab".repeat(32);
 const CANDIDATES: { id: string; title: string; story: string; tx: () => any }[] = [
   { id: "ok-reg", title: "Honest register", story: "One register call on the sponsor's pool.", tx: () => intent(call("register")) },
-  { id: "ok-auth", title: "Honest authorize", story: "One authorize call, fresh nullifier.", tx: () => intent(call("authorize", POOL_ADDR, [new Uint8Array(32).fill(1)])) },
+  { id: "ok-auth", title: "Honest authorize", story: "One authorize call, fresh nullifier. Subject to the minimum anonymity set.", tx: () => intent(call("authorize", POOL_ADDR, [new Uint8Array(32).fill(1)])) },
   { id: "bad-deploy", title: "Smuggled contract deploy", story: "The sponsee attaches a deployment so the sponsor pays for their own contract.", tx: () => intent(call("authorize"), new ContractDeploy()) },
   { id: "bad-maint", title: "Smuggled maintenance update", story: "A maintenance update to rewrite someone's verifier keys, paid by the sponsor.", tx: () => intent(new MaintenanceUpdate()) },
   { id: "bad-other", title: "Call to a different contract", story: "A valid-looking call that targets some other contract entirely.", tx: () => intent(call("authorize", "b".repeat(64))) },
@@ -363,7 +364,7 @@ const CANDIDATES: { id: string; title: string; story: string; tx: () => any }[] 
 function runInspector() {
   S.inspector = {};
   for (const c of CANDIDATES) {
-    S.inspector[c.id] = inspectCandidate(c.tx(), { poolAddress: POOL_ADDR, spentNullifiersHex: new Set([SPENT]) });
+    S.inspector[c.id] = inspectCandidate(c.tx(), { poolAddress: POOL_ADDR, spentNullifiersHex: new Set([SPENT]), minMembers: S.minMembers, memberCount: S.pool ? S.pool.view().registered.length : 0 });
   }
   render();
 }
@@ -379,6 +380,12 @@ async function runAttack(a: Attack) {
 async function runAllAttacks() {
   for (const a of ATTACKS) await runAttack(a);
   runInspector();
+}
+
+function anonMeter(n: number, min: number): string {
+  const pct = Math.min(100, Math.round((n / Math.max(1, min)) * 100));
+  const ok = n >= min;
+  return `<div class="anon"><div class="row between small"><b>Anonymity set</b><span class="pill ${ok ? "good" : "warn"}">${n} of ${min} needed</span></div><div class="meter ${ok ? "" : "hot"}"><i data-meter="anon" data-to="${pct}" style="width:${pct}%"></i></div><p class="small muted" style="margin:6px 0 0">${n === 0 ? "No members yet." : n === 1 ? "One member: the sponsor can tell who is authorizing. Nothing is hidden." : ok ? `A member is indistinguishable among ${n}.` : `Below the minimum: the sponsor will not pay for authorizations yet, but still sponsors registrations so the pool can grow.`}</p></div>`;
 }
 
 /** The distinct byte-strings an observer can read in a call's public transcript,
@@ -466,6 +473,8 @@ const view = {
             ? `<div class="stat"><b><span data-count="used" data-to="${v.used}">${v.used}</span> <span style="font-size:15px;text-transform:none;letter-spacing:0">of ${v.budget}</span></b><span>authorizations granted</span></div>
           <div class="meter ${v.budget > 0n && v.used * 10n >= v.budget * 8n ? "hot" : ""}" role="progressbar" aria-valuemin="0" aria-valuemax="${v.budget}" aria-valuenow="${v.used}"><i data-meter="budget" data-to="${v.budget > 0n ? Math.min(100, Number((v.used * 100n) / v.budget)) : 0}" style="width:${v.budget > 0n ? Math.min(100, Number((v.used * 100n) / v.budget)) : 0}%"></i></div>
           <div class="row"><span class="pill ${v.active ? "good" : "bad"}">${v.active ? "open" : "closed"}</span><span class="pill">${v.registered.length} members</span><span class="pill">quota ${v.quota}/epoch</span></div>
+          ${anonMeter(v.registered.length, S.minMembers)}
+          <div><label for="f-min">Minimum anonymity set (sponsor policy)</label><input id="f-min" type="number" min="1" max="50" value="${S.minMembers}" /></div>
           <div class="row"><button class="btn" data-act="topup">Raise budget +5</button><button class="btn danger" data-act="close" ${v.active ? "" : "disabled"}>Close pool</button></div>`
             : `<p class="muted">Deploy a pool to see its budget.</p>`
         }
@@ -540,6 +549,7 @@ const view = {
         <div><h3>Registered commitments</h3><div class="tx">${v.registered.map((c, i) => `${i + 1}. ${short(hex(c), 14)}`).join("<br>") || "—"}</div></div>
         <div><h3>Spent nullifiers</h3><div class="tx">${v.nullifiers.map((c, i) => `${i + 1}. ${short(hex(c), 14)}`).join("<br>") || "—"}</div></div>
       </div>
+      <div style="margin-top:14px">${anonMeter(v.registered.length, S.minMembers)}</div>
       <p class="small muted" style="margin-top:10px">Try to match a nullifier to a commitment. There is no information to do it with: the nullifier is a hash of (pool, epoch, slot, <em>secret</em>), and the secret is never published.</p>
     </div>
 
@@ -706,6 +716,7 @@ document.addEventListener("click", async (ev) => {
 
 document.addEventListener("change", (ev) => {
   const t = ev.target as HTMLInputElement;
+  if (t.id === "f-min") { S.minMembers = Math.max(1, Math.min(50, Number(t.value) || 1)); render(); return; }
   if (!t.id?.startsWith("f-")) return;
   const g = (id: string) => (document.getElementById(id) as HTMLInputElement | null)?.value;
   const pow = POW_PRESETS.find((x) => x.id === g("f-pow"));
