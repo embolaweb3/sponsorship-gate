@@ -410,6 +410,11 @@ function runInspector() {
   for (const c of CANDIDATES) {
     S.inspector[c.id] = inspectCandidate(c.tx(), { poolAddress: POOL_ADDR, spentNullifiersHex: new Set([SPENT]), minMembers: S.minMembers, memberCount: S.pool ? S.pool.view().registered.length : 0 });
   }
+  // A replay built from a REAL nullifier currently in this pool's ledger.
+  const spent = S.pool?.view().nullifiers[0];
+  if (spent) {
+    S.inspector["live-replay"] = inspectCandidate(intent(call("authorize", POOL_ADDR, [spent])), { poolAddress: POOL_ADDR, spentNullifiersHex: new Set(S.pool!.view().nullifiers.map(hex)), minMembers: S.minMembers, memberCount: S.pool!.view().registered.length });
+  } else delete S.inspector["live-replay"];
   render();
 }
 
@@ -573,7 +578,7 @@ const view = {
     <div class="card" style="margin-top:16px">
       <div class="row between"><div><h2>3 · The sponsor's inspector</h2><p class="muted small" style="margin:0">Before spending DUST, the sponsor inspects the <em>exact</em> candidate transaction. Same function the devnet sponsor service runs.</p></div><button class="btn" data-act="inspect">Run all candidates</button></div>
       <table style="margin-top:12px"><thead><tr><th>Candidate</th><th>Verdict</th></tr></thead><tbody>
-      ${CANDIDATES.map((c) => {
+      ${[...CANDIDATES, ...(S.inspector["live-replay"] ? [{ id: "live-replay", title: "Replay of a real spent nullifier", story: "Built from a nullifier actually in this pool's ledger right now (run the demo, then inspect)." }] : [])].map((c) => {
         const r = S.inspector[c.id];
         return `<tr><td><b>${c.title}</b><div class="muted small">${c.story}</div></td><td>${r ? (r.ok ? `<span class="pill good">balance it</span><div class="small muted mono" style="margin-top:4px">${esc(r.entryPoint)}</div>` : `<span class="pill bad">refuse</span><div class="small mono" style="margin-top:4px">${r.code}</div>`) : `<span class="muted">—</span>`}</td></tr>`;
       }).join("")}

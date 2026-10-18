@@ -53,6 +53,7 @@ await step("sponsor tab: inspector verdicts", async () => {
   for (const code of ["NOT_A_CALL", "TOO_MANY_ACTIONS", "WRONG_CONTRACT", "ENTRY_POINT_NOT_SPONSORED", "HAS_ZSWAP_MOVEMENT", "NULLIFIER_ALREADY_SPENT"])
     if (!t.includes(code)) throw new Error("missing " + code);
   if ((t.match(/balance it/g) ?? []).length !== 2) throw new Error("expected exactly 2 'balance it'");
+  if (!t.includes("Replay of a real spent nullifier")) throw new Error("live replay candidate missing");
   await page.screenshot({ path: `${shots}/04-sponsor.png`, fullPage: true });
 });
 
