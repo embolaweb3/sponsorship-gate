@@ -203,3 +203,4 @@ nav.tabs button { transition: color .2s, background .2s, box-shadow .25s; }
 .tree text { fill: var(--muted); font: 600 11px var(--sans); text-anchor: middle; }
 .tree text.lab { fill: var(--text); }
 @keyframes draw { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
+.stat b span[data-count] { font-size: inherit; text-transform: none; color: inherit; letter-spacing: inherit; font-weight: inherit; }

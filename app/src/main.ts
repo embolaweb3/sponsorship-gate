@@ -30,6 +30,7 @@ const S = {
   enter: true,
   minMembers: 3,
   showPath: false,
+  feePerTx: 0,
   activity: [] as { t: number; kind: string; text: string }[],
   attacks: {} as Record<string, Outcome>,
   inspector: {} as Record<string, Verdict>,
@@ -435,6 +436,24 @@ function merkleSvg(n: number, mine: number | null, showPath: boolean): string {
   return `<svg class="tree" viewBox="0 0 ${W} ${H}" role="img" aria-label="Merkle tree with ${n} members">${edges}${nodes}${more}</svg>`;
 }
 
+/** Sponsor exposure estimate. Fee defaults to the mean measured on the devnet run. */
+function runway(v: ReturnType<Pool["view"]>): string {
+  const measured = (S.evidence?.sponsoredTxs ?? []).map((t: any) => Number(t.fee));
+  const mean = measured.length ? Math.round(measured.reduce((a: number, b: number) => a + b, 0) / measured.length) : 0;
+  const fee = S.feePerTx || mean;
+  const left = Number(v.budget - v.used);
+  const perEpochMax = Math.min(left, v.registered.length * Number(v.quota));
+  const fmt = (n: number) => n.toLocaleString("en-US");
+  const epochs = perEpochMax > 0 ? Math.ceil(left / perEpochMax) : 0;
+  return `<div class="stack"><div><h3>Runway</h3><p class="muted small" style="margin:0">Worst case if every member uses every slot, every epoch.</p></div>
+  <div><label for="f-fee">Fee per sponsored tx (smallest DUST unit)</label><input id="f-fee" type="number" min="0" value="${fee}" />
+  <div class="small muted" style="margin-top:4px">${mean ? `Default is the mean of ${measured.length} real devnet transactions.` : "No devnet evidence loaded; enter an estimate."}</div></div>
+  <div class="grid g3"><div class="stat"><b data-count="left" data-to="${left}">${left}</b><span>authorizations left</span></div>
+  <div class="stat"><b data-count="pem" data-to="${perEpochMax}">${perEpochMax}</b><span>max per epoch</span></div>
+  <div class="stat"><b>${epochs || "—"}</b><span>epochs of runway</span></div></div>
+  <div class="result info small">Max remaining spend: <b>${fmt(left * fee)}</b> units. Max per epoch: <b>${fmt(perEpochMax * fee)}</b> units. The budget ceiling makes this a hard bound, not a forecast.</div></div>`;
+}
+
 function anonMeter(n: number, min: number): string {
   const pct = Math.min(100, Math.round((n / Math.max(1, min)) * 100));
   const ok = n >= min;
@@ -534,6 +553,7 @@ const view = {
       </div>
     </div>
 
+    ${v ? `<div class="card" style="margin-top:16px">${runway(v)}</div>` : ""}
     <div class="card" style="margin-top:16px">
       <div class="row between"><div><h2>3 · The sponsor's inspector</h2><p class="muted small" style="margin:0">Before spending DUST, the sponsor inspects the <em>exact</em> candidate transaction. Same function the devnet sponsor service runs.</p></div><button class="btn" data-act="inspect">Run all candidates</button></div>
       <table style="margin-top:12px"><thead><tr><th>Candidate</th><th>Verdict</th></tr></thead><tbody>
@@ -777,6 +797,7 @@ document.addEventListener("click", async (ev) => {
 
 document.addEventListener("change", (ev) => {
   const t = ev.target as HTMLInputElement;
+  if (t.id === "f-fee") { S.feePerTx = Math.max(0, Number(t.value) || 0); render(); return; }
   if (t.id === "f-min") { S.minMembers = Math.max(1, Math.min(50, Number(t.value) || 1)); render(); return; }
   if (!t.id?.startsWith("f-")) return;
   const g = (id: string) => (document.getElementById(id) as HTMLInputElement | null)?.value;
