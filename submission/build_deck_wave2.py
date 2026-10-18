@@ -62,7 +62,7 @@ t = textbox(s, MARGIN_L, Inches(4.45), Inches(11), Inches(0.5))
 set_text(t.text_frame, "Anonymous, rate-limited fee sponsorship for Midnight", size=14, color=GRAY)
 
 hline(s, MARGIN_L, Inches(5.3), Inches(4.6))
-chips = [("54 automated tests", TEAL), ("real devnet transactions", TEAL), ("web console, no wallet needed", VIOLET)]
+chips = [("70 automated checks", TEAL), ("real devnet transactions", TEAL), ("web console, no wallet needed", VIOLET)]
 x = MARGIN_L
 for label, col in chips:
     w = Inches(0.35 + 0.115 * len(label))
@@ -284,7 +284,7 @@ for st in steps:
 t = textbox(s, MARGIN_L, y + Inches(0.1), Inches(8.1), Inches(0.9))
 set_text(t.text_frame, f"Pool {short(EVID['poolAddress'], 10)} on a local devnet (node 0.22.3, indexer 4.0.0, proof-server 8.1.0). Reproduce: docker compose up, npm run compact, npm run flow.", size=11.5, color=GRAY, line_spacing=1.25)
 
-stats = [("34", "contract tests"), ("20", "inspector tests"), ("8", "browser e2e checks"), ("1", "wave-1 control")]
+stats = [("34", "contract tests"), ("24", "inspector tests"), ("12", "browser e2e checks"), ("1", "wave-1 control")]
 sx = Inches(9.2)
 sy = Inches(1.85)
 for i, (num, lab) in enumerate(stats):
