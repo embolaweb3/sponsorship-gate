@@ -216,6 +216,17 @@ export class Pool {
     };
   }
 
+  /** Leaf position of a member in the Merkle tree, read from its path (not from
+   * the Set, which iterates in sorted order rather than insertion order). */
+  leafIndex(secret: Uint8Array): number | null {
+    if (this.ver !== "v2") return null;
+    const l: any = this.mod.ledger((this.ctx.callContext as any).currentQueryContext.state);
+    const path = l.members.findPathForLeaf(this.commitmentOf(secret));
+    if (!path) return null;
+    // entries run leaf -> root; goes_left=true means this node is the LEFT child
+    return path.path.reduce((acc: number, e: any, i: number) => acc + (e.goes_left ? 0 : 1 << i), 0);
+  }
+
   transcript(): TranscriptProbe {
     return probe(this.ctx as any);
   }
