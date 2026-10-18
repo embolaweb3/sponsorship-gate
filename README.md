@@ -7,7 +7,7 @@ Anonymous, rate-limited fee sponsorship for Midnight. A sponsor funds a pool; me
 | | |
 |---|---|
 | **Try it now** | `cd app && npm install && npm run dev`, or the GitHub Pages build (see [Deploying the console](#deploying-the-console)). Click **Run the guided demo**. |
-| **Tests** | 34 contract tests · 20 sponsor-inspector tests · 8 browser end-to-end checks |
+| **Tests** | 34 contract tests · 24 sponsor-inspector tests · 12 browser end-to-end checks |
 | **Real devnet evidence** | [`integration/evidence-local.json`](integration/evidence-local.json): deploy + 3 sponsored transactions, with blocks, tx ids, fees |
 | **Pitch deck** | [`submission/Sponsorship-Gate-Wave2-Pitch-Deck.pptx`](submission/Sponsorship-Gate-Wave2-Pitch-Deck.pptx) |
 | **License** | Apache-2.0 ([`LICENSE`](LICENSE)) |
@@ -51,9 +51,9 @@ Neither proof-of-work-as-Sybil-cost (Dwork-Naor, 1992) nor epoch-scoped nullifie
 | **Sponsor budget** | Off-chain accounting only | On-chain `maxAuthorizations` ceiling + counter, owner `topUp` (increase-only) |
 | **Deployment** | Never completed | Deployed and exercised on a local devnet; root cause of Wave 1's hang found and fixed (see [below](#why-wave-1-never-deployed)) |
 | **Two-party sponsorship** | Specified in prose | Running code: an unfunded sponsee's transactions, balanced and submitted by the sponsor |
-| **Sponsor-side check** | An interface comment | `inspectCandidate`: 6 refusal classes, 20 unit tests, exercised against a real `ContractDeploy` |
+| **Sponsor-side check** | An interface comment | `inspectCandidate`: 7 refusal classes (incl. a minimum-anonymity-set policy), 24 unit tests, exercised against a real `ContractDeploy` |
 | **Frontend** | None | Web console running the real compiled circuits in-browser (sponsor / member / observer / attack lab / on-chain evidence) |
-| **Tests** | 16 simulated | 34 contract + 20 inspector + 8 browser e2e, plus a real-devnet run with abuse attempts |
+| **Tests** | 16 simulated | 34 contract + 24 inspector + 12 browser e2e, plus a real-devnet run with abuse attempts |
 | **Licensing** | README referenced a missing `LICENSE` | `LICENSE` (Apache-2.0) added |
 
 ## How to evaluate this submission
@@ -71,7 +71,9 @@ npm run dev          # http://localhost:5173
 * **Overview → Run the guided demo.** Deploys a pool, registers three members, authorizes each, and drops you on the Observer tab.
 * **Observer → Linkability lab.** The same member, the same flow, run on the Wave 1 contract and the Wave 2 contract. The Wave 1 transcript contains the member's commitment (highlighted); the Wave 2 transcript does not.
 * **Attack lab → Run all.** Ten attacks on fresh pools (replay, outsider, over-quota, skipped PoW, double registration, future epoch, budget drain, non-owner `topUp`, lowering the budget, using a closed pool). A pass means the circuit *refused*: no proof exists, so no transaction would be made.
-* **Sponsor → Run all candidates.** The sponsor's inspector verdict on nine candidate transactions.
+* **Sponsor → Run all candidates.** The sponsor's inspector verdict on nine candidate transactions, plus a replay built from a real spent nullifier in the live pool. Also here: the **anonymity-set meter** with an adjustable minimum-pool-size policy, and a **runway calculator** using the fee measured on the devnet.
+* **Observer → membership tree.** An animated Merkle tree; **Reveal private path** shows what stays hidden (your path) versus what is disclosed (only the root). Hashes are click-to-copy, and the public ledger view downloads as JSON.
+* **Anywhere:** an activity timeline of every event, a light/dark toggle, and keyboard shortcuts (press <kbd>?</kbd>).
 * **On-chain.** The devnet evidence.
 
 Everything the sandbox does is executed by the compiled `sponsorship-gate.compact` circuits (the same generated module the contract tests run), not by a re-implementation.
@@ -86,11 +88,11 @@ npm run compact:control   # compile the preserved Wave 1 contract (for the leak 
 npm test                  # 34 tests
 
 cd ../integration
-npm test                  # 20 sponsor-inspector tests, no install needed
+npm test                  # 24 sponsor-inspector tests, no install needed
 
 cd ../app
 npm run build && npm run preview &
-CHROME_PATH=/path/to/chrome npm run e2e     # 8 browser checks
+CHROME_PATH=/path/to/chrome npm run e2e     # 12 browser checks
 ```
 
 ### 3. The real devnet flow (needs Docker; ~5 minutes)
@@ -195,6 +197,7 @@ The contract deliberately does **not** read or move DUST. It enforces a budget t
 | `ENTRY_POINT_NOT_SPONSORED` | `topUp` / `deactivate`: owner-only, never something a sponsor pays a stranger for |
 | `HAS_ZSWAP_MOVEMENT` | A candidate that also moves shielded value: a sponsor pays fees, not transfers |
 | `NULLIFIER_ALREADY_SPENT` | A replay that would fail on-chain *after* the sponsor had paid |
+| `ANONYMITY_SET_TOO_SMALL` | (Optional policy) `authorize` while the pool has fewer members than the sponsor's minimum. `register` stays sponsored so the pool can grow |
 
 The file has no Node or browser dependencies, so the **same function** runs in the devnet sponsor service, the unit tests, and the web console. Midnight's contract-communications commitment then prevents the payload being swapped after the check.
 
@@ -208,7 +211,7 @@ Terms are used precisely. Nothing is claimed at a higher tier than it has reache
 
 | Tier | Evidence |
 |---|---|
-| **SIMULATED** | 34 contract tests: the 16 Wave 1 invariants (re-passing on the new contract), 13 feature/membership tests (quota, budget, `topUp`, historic roots, outsiders, cross-pool), 4 transcript-privacy tests, 1 Wave 1 control. 20 inspector unit tests. 8 browser end-to-end checks in headless Chrome. |
+| **SIMULATED** | 34 contract tests: the 16 Wave 1 invariants (re-passing on the new contract), 13 feature/membership tests (quota, budget, `topUp`, historic roots, outsiders, cross-pool), 4 transcript-privacy tests, 1 Wave 1 control. 24 inspector unit tests. 12 browser end-to-end checks in headless Chrome. |
 | **LOCAL** | A real pool deployment and 3 sponsored transactions (register + 2 authorize) by an unfunded sponsee, paid by the sponsor, with real proofs; abuse attempts refused (quota, replay, smuggled deploy, sponsor with no DUST); byte-level privacy check over the real transactions. Ids in `integration/evidence-local.json`. |
 | **LIVE** | **None yet.** No Preprod or mainnet deployment. `TARGET=preprod npm run flow` runs the same script given a funded Preprod wallet in `integration/.preprod-seed` (git-ignored). |
 
@@ -242,7 +245,7 @@ integration/
   src/sponsored-flow.ts            the real two-party devnet flow (+ abuse attempts, privacy check)
   src/lib/sponsor-inspector.ts     the inspector (dependency-free; shared with the console)
   src/lib/chain.ts                 wallet / network wiring
-  src/test/inspector.test.ts       20 unit tests
+  src/test/inspector.test.ts       24 unit tests
   evidence-local.json              output of the last devnet run
   src/deploy-and-call.ts           Wave 1's single-party probe; targets the Wave 1 contract, kept for history
 
@@ -266,10 +269,10 @@ To refresh them after changing the contract: `npm run compact && npm run compact
 **Wave 3**
 
 * Preprod deployment with the same `npm run flow`, and a funded wallet.
+* Enforce the minimum-anonymity-set policy in a long-running sponsor service (the inspector option and console control exist).
 * A reference sponsor *service* (long-running, per-pool budgets, rate limits) built around `inspectCandidate`.
 * Epoch-partitioned nullifiers so the spent set stops growing without bound.
 * A browser wallet (DApp connector) so the console can drive a live pool, not only the sandbox.
-* Minimum-anonymity-set policy surfaced in the console.
 * An independent review of the contract and the inspector.
 
 ## License
