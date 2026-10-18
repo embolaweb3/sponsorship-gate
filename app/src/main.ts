@@ -30,6 +30,7 @@ const S = {
   enter: true,
   minMembers: 3,
   showPath: false,
+  help: false,
   feePerTx: 0,
   activity: [] as { t: number; kind: string; text: string }[],
   attacks: {} as Record<string, Outcome>,
@@ -745,7 +746,8 @@ function render() {
     <div class="clock"><button class="icon" data-act="theme" aria-label="Switch to ${document.documentElement.dataset.theme === "light" ? "dark" : "light"} theme" title="Toggle theme">${document.documentElement.dataset.theme === "light" ? "☾" : "☀"}</button>${p ? `<span class="pill">epoch ${p.epoch}</span>` : ""}<span class="pill ${S.busy ? "warn" : "good"}">${S.busy ? esc(S.busy) : "sandbox · real circuits"}</span></div>
   </div></header>
   <main><div class="wrap ${S.enter ? "enter" : ""}">${view[S.tab]()}</div></main>
-  <div class="wrap"><footer>Apache-2.0 · Midnight Buildathon Wave 2 · Sandbox runs the compiled <span class="mono">sponsorship-gate.compact</span>; the On-chain tab shows the devnet run.</footer></div>
+  ${S.help ? `<div class="modal-back" data-act="helpclose"><div class="modal" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts"><h2>Keyboard shortcuts</h2><div class="keys">${TABS.map((t, i) => `<span class="kbd">${i + 1}</span><span>${t.label}</span>`).join("")}<span class="kbd">D</span><span>Run the guided demo</span><span class="kbd">T</span><span>Toggle light / dark</span><span class="kbd">?</span><span>Show / hide this help</span><span class="kbd">Esc</span><span>Close</span></div><button class="btn primary" data-act="helpclose">Got it</button></div></div>` : ""}
+  <div class="wrap"><footer>Apache-2.0 · Midnight Buildathon Wave 2 · Sandbox runs the compiled <span class="mono">sponsorship-gate.compact</span>; the On-chain tab shows the devnet run. <span class="footer-hint">Press <span class="kbd">?</span> for shortcuts.</span></footer></div>
 `;
   S.enter = false;
   postRender();
@@ -774,6 +776,16 @@ function postRender() {
     requestAnimationFrame(() => requestAnimationFrame(() => (el.style.width = to + "%")));
   });
 }
+
+document.addEventListener("keydown", (e) => {
+  const t = e.target as HTMLElement;
+  if (e.metaKey || e.ctrlKey || e.altKey || ["INPUT", "SELECT", "TEXTAREA"].includes(t.tagName)) return;
+  if (e.key === "Escape" && S.help) { S.help = false; return render(); }
+  if (e.key === "?") { S.help = !S.help; return render(); }
+  if (/^[1-6]$/.test(e.key)) { S.tab = TABS[Number(e.key) - 1].id; S.enter = true; render(); window.scrollTo({ top: 0 }); return; }
+  if (e.key.toLowerCase() === "t") return toggleTheme();
+  if (e.key.toLowerCase() === "d" && !S.busy) return void guidedDemo();
+});
 
 function exportSnapshot() {
   if (!S.pool) return;
@@ -825,6 +837,7 @@ document.addEventListener("click", async (ev) => {
     case "register": return m && register(m).then(render);
     case "auth": return m && authorize(m, BigInt(el.dataset.slot!)).then(render);
     case "epoch": return advanceEpoch();
+    case "helpclose": if ((ev.target as HTMLElement).closest(".modal") && !(ev.target as HTMLElement).closest("button")) return; S.help = false; return render();
     case "theme": return toggleTheme();
     case "export": return exportSnapshot();
     case "path": S.showPath = !S.showPath; return render();
