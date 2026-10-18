@@ -89,6 +89,58 @@ await step("on-chain tab renders", async () => {
   await page.screenshot({ path: `${shots}/07-chain.png`, fullPage: true });
 });
 
+await step("keyboard: number keys switch tabs, ? opens help, Esc closes", async () => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.keyboard.press("5");
+  await page.waitForFunction(() => document.querySelector("main h2")?.textContent === "Attack lab");
+  await page.keyboard.press("?");
+  await page.waitForSelector(".modal");
+  await page.keyboard.press("Escape");
+  await page.waitForSelector(".modal", { state: "detached" });
+});
+
+await step("theme toggle flips data-theme and persists across reload", async () => {
+  const before = await page.evaluate(() => document.documentElement.dataset.theme);
+  await page.click('[data-act="theme"]');
+  const after = await page.evaluate(() => document.documentElement.dataset.theme);
+  if (before === after) throw new Error("theme did not change");
+  await page.reload();
+  await page.waitForSelector("h1");
+  const reloaded = await page.evaluate(() => document.documentElement.dataset.theme);
+  if (reloaded !== after) throw new Error("theme not persisted");
+});
+
+await step("min anonymity set: a pool of one is refused authorize, but register stays sponsored", async () => {
+  await page.click('[data-go="sponsor"]');
+  await page.click('[data-act="deploy"]');
+  await page.waitForSelector("text=Pool deployed");
+  await page.click('[data-go="member"]');
+  await page.click('[data-act="addmember"]');
+  await page.click('[data-act="mine"]');
+  await page.waitForSelector("text=✓ solved", { timeout: 60000 });
+  await page.click('[data-act="register"]');
+  await page.click('[data-go="sponsor"]');
+  await page.click('[data-act="inspect"]');
+  const t = await page.innerText("main");
+  if (!t.includes("ANONYMITY_SET_TOO_SMALL")) throw new Error("authorize not refused for a 1-member pool");
+  if (!t.includes("1 of 3 needed")) throw new Error("meter text missing");
+  if (!t.toLowerCase().includes("runway") || !t.toLowerCase().includes("epochs of runway")) throw new Error("runway panel missing");
+  await page.screenshot({ path: `${shots}/09-min-set.png`, fullPage: true });
+});
+
+await step("observer: tree path toggle, copy buttons, snapshot download, timeline", async () => {
+  await page.click('[data-go="overview"]');
+  await page.click('[data-act="demo"]');
+  await page.waitForSelector("text=Linkability lab", { timeout: 90000 });
+  await page.click('[data-act="path"]');
+  await page.waitForSelector(".tree .path");
+  if ((await page.$("button.copy")).length < 6) throw new Error("expected copy buttons for 3 commitments + 3 nullifiers");
+  const [dl] = await Promise.all([page.waitForEvent("download"), page.click('[data-act="export"]')]);
+  if (!dl.suggestedFilename().endsWith(".json")) throw new Error("bad filename");
+  const t = await page.innerText(".timeline");
+  if (!t.includes("registered") || !t.includes("authorized")) throw new Error("timeline missing events");
+});
+
 await step("mobile layout has no horizontal overflow", async () => {
   await page.setViewportSize({ width: 390, height: 800 });
   for (const tab of ["overview", "sponsor", "member", "observer", "attacks", "chain"]) {
