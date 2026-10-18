@@ -1,0 +1,108 @@
+{
+  "network": "local",
+  "poolAddress": "092752298f38749b591c75fab657a0acf644c7e02bde42fa0d36da2b46d29497",
+  "deployTx": "00c96c5bcd63342c65dda63b11c50beb0b0119c2f4ba4a3107d1e12c21fe0559e5",
+  "steps": [
+    {
+      "step": "deploy",
+      "txId": "00c96c5bcd63342c65dda63b11c50beb0b0119c2f4ba4a3107d1e12c21fe0559e5",
+      "blockHeight": "358"
+    },
+    {
+      "step": "register (sponsored)",
+      "txId": "00a8e444a8f243690ebdecc180a930ef21e9aaa37361a8cf36d457f16ada7001bd",
+      "blockHeight": "366"
+    },
+    {
+      "step": "authorize epoch 0 slot 0 (sponsored)",
+      "txId": "0027b2ab2071826a045e4d4139188d73647f48b9d3421f34694d6bb6026097098d",
+      "blockHeight": "372"
+    },
+    {
+      "step": "authorize epoch 0 slot 1 (sponsored)",
+      "txId": "009e9efd4d1985c7e7aedbc1ec8a87ceb81ff36be43b36114e7d2ebbd381482f15",
+      "blockHeight": "382"
+    }
+  ],
+  "abuseAttempts": [
+    {
+      "attempt": "third authorization in the same epoch (quota=2)",
+      "refused": true,
+      "message": "Error: failed assert: slot exceeds epoch quota"
+    },
+    {
+      "attempt": "replay slot 0 in the same epoch",
+      "refused": true,
+      "message": "Error: failed assert: already authorized this epoch"
+    },
+    {
+      "attempt": "sponsee asks the sponsor to pay for an unrelated contract deployment",
+      "refused": true,
+      "message": "sponsor refused: NOT_A_CALL — non-call action (ContractDeploy) in candidate"
+    },
+    {
+      "attempt": "register through a sponsor that has no DUST",
+      "refused": true,
+      "message": "(FiberFailure) Wallet.InsufficientFunds: Insufficient Funds: could not balance dust"
+    }
+  ],
+  "registerTx": "00a8e444a8f243690ebdecc180a930ef21e9aaa37361a8cf36d457f16ada7001bd",
+  "nullifiers": [
+    "b8438888bfb0c43ab04cd3ae7c19c2fdcb1bc2216fc8d8ac5a294b5130c24f87",
+    "36a84c2a38b9629738e65ab70da04ab38a6ed7ddbe422a5599124376249869cf"
+  ],
+  "sponsorFeesPaid": "900000020153862",
+  "sponseeFeesPaid": "0",
+  "sponsoredTxs": [
+    {
+      "entry": "register",
+      "fee": "300000008034678"
+    },
+    {
+      "entry": "authorize",
+      "fee": "300000007323308"
+    },
+    {
+      "entry": "authorize",
+      "fee": "300000004795876"
+    }
+  ],
+  "onChainPrivacyCheck": [
+    {
+      "entry": "register",
+      "containsCommitment": true
+    },
+    {
+      "entry": "authorize",
+      "containsCommitment": false
+    },
+    {
+      "entry": "authorize",
+      "containsCommitment": false
+    }
+  ],
+  "sponsorDecisions": [
+    {
+      "ok": true,
+      "entryPoint": "register"
+    },
+    {
+      "ok": true,
+      "entryPoint": "authorize"
+    },
+    {
+      "ok": true,
+      "entryPoint": "authorize"
+    },
+    {
+      "ok": false,
+      "code": "NOT_A_CALL",
+      "detail": "non-call action (ContractDeploy) in candidate"
+    }
+  ],
+  "observerView": {
+    "registered": "1",
+    "spentNullifiers": "2",
+    "authorizedCount": "2"
+  }
+}

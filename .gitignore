@@ -9,3 +9,7 @@ research/
 .midnight-local-dev/
 .warden-reference/
 contract/managed-v1/
+app/node_modules/
+app/dist/
+app/e2e/screenshots/
+app/src/generated/*/index.js.map

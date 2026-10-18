@@ -6,7 +6,11 @@
   "scripts": {
     "deploy": "node --experimental-strip-types src/deploy-and-call.ts",
     "deploy:preprod": "TARGET=preprod node --experimental-strip-types src/deploy-and-call.ts",
-    "preprod:address": "node --experimental-strip-types src/print-preprod-address.ts"
+    "preprod:address": "node --experimental-strip-types src/print-preprod-address.ts",
+    "flow": "node --experimental-strip-types src/sponsored-flow.ts",
+    "flow:preprod": "TARGET=preprod node --experimental-strip-types src/sponsored-flow.ts",
+    "compact": "compact compile +0.31.1 ../contract/src/sponsorship-gate.compact contract-managed-v2/sponsorship-gate",
+    "test": "node --experimental-strip-types --test src/test/*.test.ts"
   },
   "dependencies": {
     "@midnight-ntwrk/compact-runtime": "0.16.0",

@@ -2,3 +2,5 @@ node_modules/
 midnight-level-db/
 *.log
 .preprod-seed
+contract-managed-v2/
+evidence-*.json.tmp
