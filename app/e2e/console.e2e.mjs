@@ -11,7 +11,7 @@ const shots = process.env.SHOTS ?? "e2e/screenshots";
 mkdirSync(shots, { recursive: true });
 let failed = 0;
 const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH, headless: true });
-const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+const page = await browser.newPage({ colorScheme: "dark", viewport: { width: 1280, height: 900 } });
 const errors = [];
 page.on("pageerror", (e) => errors.push("pageerror: " + e.message));
 page.on("console", (m) => m.type() === "error" && errors.push("console: " + m.text()));
