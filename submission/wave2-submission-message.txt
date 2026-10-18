@@ -11,7 +11,7 @@ WHAT WE SHIPPED
 - A real two-party flow on a local devnet. A sponsee with no NIGHT, no DUST and no wallet registered and authorized; the sponsor inspected each candidate transaction, balanced it with its own DUST, and submitted it. Sponsee fees paid: 0.
 - A sponsor-side inspector that refuses smuggled contract deploys (exercised against a real ContractDeploy), bundled calls, foreign contracts, owner-only entry points, shielded movement and replayed nullifiers. A sponsor with no DUST fails with Wallet.InsufficientFunds and leaves no trace in the pool.
 - A web console that runs the real compiled circuits in the browser, with no wallet and no Docker: a guided demo, a linkability lab (Wave 1 vs Wave 2 on the same member), a ten-attack lab, the sponsor inspector, and the devnet evidence.
-- 34 contract tests, 20 inspector tests, 8 browser end-to-end checks.
+- 34 contract tests, 24 inspector tests, 12 browser end-to-end checks.
 
 WHY WAVE 1 NEVER DEPLOYED. The transactions were dropped silently by a node newer than the SDK's ledger (node 1.0.0 / indexer 4.3.3). The pinned set the SDK line is validated against is node 0.22.3 / indexer 4.0.0. infra/devnet/standalone.yml pins it, with the reason beside it.
 
