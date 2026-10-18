@@ -182,3 +182,12 @@ button.btn.primary:hover:not(:disabled) { box-shadow: 0 10px 30px rgba(91, 123, 
 @keyframes shine { to { background-position: 200% center; } }
 nav.tabs button { transition: color .2s, background .2s, box-shadow .25s; }
 @media (prefers-reduced-motion: reduce) { .mesh i, .hero h1 { animation: none !important; } .enter > * { animation: none !important; } }
+
+/* ===== Activity timeline ===== */
+.timeline { list-style: none; margin: 0; padding: 0 0 0 14px; border-left: 1px solid var(--glass-line); max-height: 260px; overflow: auto; }
+.timeline li { position: relative; padding: 4px 0 10px 16px; font-size: 13px; animation: rise .35s both; }
+.timeline li::before { content: ""; position: absolute; left: -20px; top: 9px; width: 11px; height: 11px; border-radius: 50%; background: var(--panel); border: 2px solid var(--brand); }
+.timeline li.k-register::before { border-color: var(--good); }
+.timeline li.k-authorize::before { border-color: var(--brand); background: var(--brand); }
+.timeline li.k-warn::before { border-color: var(--warn); }
+.timeline time { color: var(--muted); font-family: var(--mono); font-size: 11px; margin-right: 8px; }

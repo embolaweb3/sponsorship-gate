@@ -29,6 +29,7 @@ const S = {
   busy: "" as string,
   enter: true,
   minMembers: 3,
+  activity: [] as { t: number; kind: string; text: string }[],
   attacks: {} as Record<string, Outcome>,
   inspector: {} as Record<string, Verdict>,
   lab: undefined as
@@ -49,6 +50,17 @@ const member = () => S.members[S.sel];
 const sleep = (ms = 0) => new Promise((r) => setTimeout(r, ms));
 let toastTimer: number | undefined;
 
+function note(kind: string, text: string) {
+  S.activity.unshift({ t: Date.now(), kind, text });
+  if (S.activity.length > 60) S.activity.pop();
+}
+
+function timeline(): string {
+  if (!S.activity.length) return "";
+  const fmt = (t: number) => new Date(t).toLocaleTimeString([], { hour12: false });
+  return `<div class="card" style="margin-top:16px"><h2>Activity</h2><p class="muted small">Every event in this sandbox pool, newest first.</p><ul class="timeline">${S.activity.map((a) => `<li class="k-${a.kind}"><time>${fmt(a.t)}</time>${esc(a.text)}</li>`).join("")}</ul></div>`;
+}
+
 function say(ok: boolean, text: string) {
   render();
   $toast.innerHTML = `<div class="toast ${ok ? "good" : "bad"}">${esc(text)}</div>`;
@@ -63,6 +75,8 @@ async function deploy() {
   render();
   await sleep(20);
   S.pool = await Pool.deploy(S.params);
+  S.activity = [];
+  note("deploy", `Pool deployed: quota ${S.params.quota}/epoch, budget ${S.params.budget}, epoch ${S.params.epochSeconds}s`);
   S.members = [];
   S.sel = 0;
   S.lab = undefined;
@@ -72,6 +86,7 @@ async function deploy() {
 
 function addMember(): Member {
   const id = S.members.length;
+  note("member", `New member created (secret stays in this tab)`);
   const m: Member = { id, name: NAMES[id % NAMES.length] + (id >= NAMES.length ? ` ${Math.floor(id / NAMES.length) + 1}` : ""), secret: randomBytes32(), attempts: 0, mining: false, registered: false, receipts: [] };
   S.members.push(m);
   S.sel = id;
@@ -104,8 +119,10 @@ async function register(m: Member) {
   try {
     await S.pool.register(m.secret, m.nonce);
     m.registered = true;
+    note("register", `${m.name} registered (commitment added, no name attached)`);
     say(true, `${m.name} registered. The ledger now holds one more commitment, with no name attached.`);
   } catch (e) {
+    note("warn", `Refused: ${explain(e).text}`);
     say(false, explain(e).text);
   }
 }
@@ -115,8 +132,10 @@ async function authorize(m: Member, slot: bigint) {
   try {
     const n = await S.pool.authorize(m.secret, S.pool.epoch, slot);
     m.receipts.push({ epoch: String(S.pool.epoch), slot: String(slot), nullifier: hex(n) });
+    note("authorize", `${m.name} authorized epoch ${S.pool.epoch} slot ${slot} → nullifier ${hex(n).slice(0, 10)}…`);
     say(true, `${m.name} authorized (epoch ${S.pool.epoch}, slot ${slot}). The sponsor can now balance one transaction.`);
   } catch (e) {
+    note("warn", `Refused: ${explain(e).text}`);
     say(false, explain(e).text);
   }
 }
@@ -125,6 +144,7 @@ function advanceEpoch() {
   if (!S.pool) return;
   const len = Number(S.pool.params.epochSeconds);
   S.pool.setTime((Number(S.pool.epoch) + 1) * len + 1);
+  note("epoch", `Clock advanced to epoch ${S.pool.epoch}; quotas refreshed`);
   say(true, `Clock advanced to epoch ${S.pool.epoch}. Every member's quota has refreshed.`);
 }
 
@@ -133,6 +153,7 @@ async function topUp() {
   const cur = S.pool.view().budget;
   try {
     await S.pool.topUp(cur + 5n);
+    note("deploy", `Budget raised ${cur} → ${cur + 5n}`);
     say(true, `Budget raised to ${cur + 5n}.`);
   } catch (e) {
     say(false, explain(e).text);
@@ -143,6 +164,7 @@ async function deactivate() {
   if (!S.pool) return;
   try {
     await S.pool.deactivate();
+    note("warn", "Pool closed by owner");
     say(true, "Pool closed. No further registrations or authorizations are possible.");
   } catch (e) {
     say(false, explain(e).text);
@@ -155,6 +177,8 @@ async function guidedDemo() {
   await sleep(20);
   S.params = { epochSeconds: 3600n, quota: 2n, budget: 6n, powTarget: 2_000_000n };
   S.pool = await Pool.deploy(S.params);
+  S.activity = [];
+  note("deploy", "Guided demo: pool deployed");
   S.members = [];
   for (let i = 0; i < 3; i++) {
     const m = addMember();
@@ -170,8 +194,10 @@ async function guidedDemo() {
     }
     await S.pool.register(m.secret, m.nonce!);
     m.registered = true;
+    note("register", `${m.name} registered`);
     const n = await S.pool.authorize(m.secret, S.pool.epoch, 0n);
     m.receipts.push({ epoch: String(S.pool.epoch), slot: "0", nullifier: hex(n) });
+    note("authorize", `${m.name} authorized epoch 0 slot 0`);
     await sleep(0);
   }
   S.sel = 0;
@@ -489,7 +515,7 @@ const view = {
         return `<tr><td><b>${c.title}</b><div class="muted small">${c.story}</div></td><td>${r ? (r.ok ? `<span class="pill good">balance it</span><div class="small muted mono" style="margin-top:4px">${esc(r.entryPoint)}</div>` : `<span class="pill bad">refuse</span><div class="small mono" style="margin-top:4px">${r.code}</div>`) : `<span class="muted">—</span>`}</td></tr>`;
       }).join("")}
       </tbody></table>
-    </div>`;
+    </div>${timeline()}`;
   },
 
   member(): string {
@@ -527,7 +553,7 @@ const view = {
             : `<h2>Add a member</h2><p class="muted">Create a member to go through register → authorize.</p><button class="btn primary" data-act="addmember">+ New member</button>`
         }
       </div>
-    </div>`;
+    </div>${timeline()}`;
   },
 
   observer(): string {
@@ -568,7 +594,7 @@ const view = {
         </div>`
           : `<p class="muted" style="margin-top:12px">Run it to see the difference.</p>`
       }
-    </div>`;
+    </div>${timeline()}`;
   },
 
   attacks(): string {
