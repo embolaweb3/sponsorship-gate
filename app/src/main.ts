@@ -27,6 +27,7 @@ const S = {
   members: [] as Member[],
   sel: 0,
   busy: "" as string,
+  enter: true,
   attacks: {} as Record<string, Outcome>,
   inspector: {} as Record<string, Verdict>,
   lab: undefined as
@@ -462,8 +463,8 @@ const view = {
         <div><h2>2 · Watch the budget</h2><p class="muted small">The contract can't read your DUST. Instead you commit to a ceiling on-chain, and it stops granting when it's reached.</p></div>
         ${
           v
-            ? `<div class="stat"><b>${v.used} <span style="font-size:15px;text-transform:none;letter-spacing:0">of ${v.budget}</span></b><span>authorizations granted</span></div>
-          <div class="meter ${v.budget > 0n && v.used * 10n >= v.budget * 8n ? "hot" : ""}" role="progressbar" aria-valuemin="0" aria-valuemax="${v.budget}" aria-valuenow="${v.used}"><i style="width:${v.budget > 0n ? Math.min(100, Number((v.used * 100n) / v.budget)) : 0}%"></i></div>
+            ? `<div class="stat"><b><span data-count="used" data-to="${v.used}">${v.used}</span> <span style="font-size:15px;text-transform:none;letter-spacing:0">of ${v.budget}</span></b><span>authorizations granted</span></div>
+          <div class="meter ${v.budget > 0n && v.used * 10n >= v.budget * 8n ? "hot" : ""}" role="progressbar" aria-valuemin="0" aria-valuemax="${v.budget}" aria-valuenow="${v.used}"><i data-meter="budget" data-to="${v.budget > 0n ? Math.min(100, Number((v.used * 100n) / v.budget)) : 0}" style="width:${v.budget > 0n ? Math.min(100, Number((v.used * 100n) / v.budget)) : 0}%"></i></div>
           <div class="row"><span class="pill ${v.active ? "good" : "bad"}">${v.active ? "open" : "closed"}</span><span class="pill">${v.registered.length} members</span><span class="pill">quota ${v.quota}/epoch</span></div>
           <div class="row"><button class="btn" data-act="topup">Raise budget +5</button><button class="btn danger" data-act="close" ${v.active ? "" : "disabled"}>Close pool</button></div>`
             : `<p class="muted">Deploy a pool to see its budget.</p>`
@@ -531,8 +532,8 @@ const view = {
       <h2>What the public ledger shows</h2>
       <p class="muted small">This is everything an indexer, the sponsor, or any stranger can read. Note what's missing: names, secrets, and any edge between a commitment and a nullifier.</p>
       <div class="grid g3" style="margin-top:12px">
-        <div class="card tight"><div class="stat"><b>${v.registered.length}</b><span>commitments</span></div></div>
-        <div class="card tight"><div class="stat"><b>${v.nullifiers.length}</b><span>nullifiers spent</span></div></div>
+        <div class="card tight"><div class="stat"><b data-count="commit" data-to="${v.registered.length}">${v.registered.length}</b><span>commitments</span></div></div>
+        <div class="card tight"><div class="stat"><b data-count="null" data-to="${v.nullifiers.length}">${v.nullifiers.length}</b><span>nullifiers spent</span></div></div>
         <div class="card tight"><div class="stat"><b class="hash" style="font-size:13px">${v.root !== undefined ? short(v.root.toString(16).padStart(64, "0"), 8) : "—"}</b><span>merkle root</span></div></div>
       </div>
       <div class="grid g2" style="margin-top:14px">
@@ -638,9 +639,35 @@ function render() {
     <nav class="tabs" role="tablist" aria-label="Sections">${TABS.map((t) => `<button role="tab" aria-selected="${S.tab === t.id}" data-go="${t.id}">${t.label}</button>`).join("")}</nav>
     <div class="clock">${p ? `<span class="pill">epoch ${p.epoch}</span>` : ""}<span class="pill ${S.busy ? "warn" : "good"}">${S.busy ? esc(S.busy) : "sandbox · real circuits"}</span></div>
   </div></header>
-  <main><div class="wrap">${view[S.tab]()}</div></main>
+  <main><div class="wrap ${S.enter ? "enter" : ""}">${view[S.tab]()}</div></main>
   <div class="wrap"><footer>Apache-2.0 · Midnight Buildathon Wave 2 · Sandbox runs the compiled <span class="mono">sponsorship-gate.compact</span>; the On-chain tab shows the devnet run.</footer></div>
 `;
+  S.enter = false;
+  postRender();
+}
+
+const shown = new Map<string, number>();
+/** Animate numbers and meters from their last shown value to the new one. */
+function postRender() {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  document.querySelectorAll<HTMLElement>("[data-count]").forEach((el) => {
+    const key = el.dataset.count!, to = Number(el.dataset.to), from = shown.get(key) ?? 0;
+    shown.set(key, to);
+    if (from === to) return;
+    const t0 = performance.now();
+    const tick = (t: number) => {
+      const p = Math.min(1, (t - t0) / 650), e = 1 - Math.pow(1 - p, 3);
+      el.textContent = String(Math.round(from + (to - from) * e));
+      if (p < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+  document.querySelectorAll<HTMLElement>("[data-meter]").forEach((el) => {
+    const key = "m:" + el.dataset.meter, to = Number(el.dataset.to), from = shown.get(key) ?? 0;
+    shown.set(key, to);
+    el.style.width = from + "%";
+    requestAnimationFrame(() => requestAnimationFrame(() => (el.style.width = to + "%")));
+  });
 }
 
 document.addEventListener("click", async (ev) => {
@@ -648,6 +675,7 @@ document.addEventListener("click", async (ev) => {
   if (!el) return;
   if (el.dataset.go) {
     S.tab = el.dataset.go as Tab;
+    S.enter = true;
     render();
     window.scrollTo({ top: 0 });
     return;

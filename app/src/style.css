@@ -159,3 +159,26 @@ button.btn { background: var(--glass); border-color: var(--glass-line); -webkit-
 button.btn.primary { background: linear-gradient(135deg, var(--brand-2), #7a5bff); border-color: transparent; box-shadow: 0 6px 22px rgba(91, 123, 255, .35); }
 .pill { background: var(--glass); border-color: var(--glass-line); }
 @supports not (backdrop-filter: blur(1px)) { .card, .step, header.top { background: var(--panel); } }
+
+/* ===== Motion ===== */
+@keyframes rise { from { opacity: 0; transform: translateY(14px) scale(.985); } to { opacity: 1; transform: none; } }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes toastIn { from { opacity: 0; transform: translate(-50%, 16px) scale(.96); } to { opacity: 1; transform: translate(-50%, 0) scale(1); } }
+@keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(0, 212, 168, .5); } 50% { box-shadow: 0 0 0 6px rgba(0, 212, 168, 0); } }
+.enter > * , .enter .grid > *, .enter .steps > * { animation: rise .55s cubic-bezier(.2, .7, .2, 1) both; }
+.enter > *:nth-child(2), .enter .grid > *:nth-child(2), .enter .steps > *:nth-child(2) { animation-delay: .07s; }
+.enter > *:nth-child(3), .enter .grid > *:nth-child(3), .enter .steps > *:nth-child(3) { animation-delay: .14s; }
+.enter > *:nth-child(4) { animation-delay: .21s; }
+.toast { animation: toastIn .3s cubic-bezier(.2, .8, .2, 1) both; }
+.card { transition: transform .25s cubic-bezier(.2, .7, .2, 1), border-color .25s, box-shadow .25s; }
+.card:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--brand) 45%, var(--glass-line)); }
+.card.tight:hover { transform: none; }
+button.btn { transition: transform .15s, box-shadow .2s, border-color .2s, background .2s; }
+button.btn:hover:not(:disabled) { transform: translateY(-1px); }
+button.btn.primary:hover:not(:disabled) { box-shadow: 0 10px 30px rgba(91, 123, 255, .5); }
+.pill.good .dot, .live-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--good); animation: pulse 2s infinite; }
+.meter > i { transition: width .7s cubic-bezier(.2, .7, .2, 1); }
+.hero h1 { background: linear-gradient(120deg, var(--text) 30%, var(--brand) 70%, var(--good)); -webkit-background-clip: text; background-clip: text; color: transparent; background-size: 200% auto; animation: shine 8s linear infinite; }
+@keyframes shine { to { background-position: 200% center; } }
+nav.tabs button { transition: color .2s, background .2s, box-shadow .25s; }
+@media (prefers-reduced-motion: reduce) { .mesh i, .hero h1 { animation: none !important; } .enter > * { animation: none !important; } }
