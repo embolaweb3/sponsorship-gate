@@ -25,6 +25,13 @@ export type InspectOptions = {
   allowedEntryPoints?: readonly string[];
   /** Hex-encoded nullifiers already present in the pool's `spentNullifiers`. */
   spentNullifiersHex?: ReadonlySet<string>;
+  /**
+   * Minimum anonymity set. A member is hidden among the pool's registered
+   * members, so a pool of one hides nothing. When both are given, the sponsor
+   * refuses to pay for `authorize` while `memberCount < minMembers`.
+   */
+  minMembers?: number;
+  memberCount?: number;
 };
 
 export type RejectCode =
@@ -34,7 +41,8 @@ export type RejectCode =
   | "WRONG_CONTRACT"
   | "ENTRY_POINT_NOT_SPONSORED"
   | "HAS_ZSWAP_MOVEMENT"
-  | "NULLIFIER_ALREADY_SPENT";
+  | "NULLIFIER_ALREADY_SPENT"
+  | "ANONYMITY_SET_TOO_SMALL";
 
 export type Verdict = { ok: true; entryPoint: string } | { ok: false; code: RejectCode; detail: string };
 
@@ -99,6 +107,12 @@ export function inspectCandidate(tx: any, opts: InspectOptions): Verdict {
   const entry = entryName(call.entryPoint);
   if (!allowed.includes(entry)) {
     return { ok: false, code: "ENTRY_POINT_NOT_SPONSORED", detail: `'${entry}' is not a sponsored entry point` };
+  }
+
+  // Privacy policy: do not sponsor authorizations that identify the member by
+  // being the only candidate. Registration is still sponsored so the pool can grow.
+  if (entry === "authorize" && opts.minMembers !== undefined && opts.memberCount !== undefined && opts.memberCount < opts.minMembers) {
+    return { ok: false, code: "ANONYMITY_SET_TOO_SMALL", detail: `pool has ${opts.memberCount} member(s); policy requires at least ${opts.minMembers}` };
   }
 
   // Replay guard: a nullifier the pool already holds is rejected on chain only

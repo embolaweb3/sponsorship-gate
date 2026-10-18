@@ -130,3 +130,21 @@ test("a cyclic structure in a transcript does not hang the replay guard", () => 
   const r = inspectCandidate(tx(call("authorize", POOL, cyc)), opts({ spentNullifiersHex: new Set(["ab".repeat(32)]) }));
   assert.equal(r.ok, true);
 });
+
+test("refuses authorize while the pool is smaller than the minimum anonymity set", () => {
+  const r = inspectCandidate(tx(call("authorize")), opts({ minMembers: 5, memberCount: 3 }));
+  assert.deepEqual(r.ok === false && r.code, "ANONYMITY_SET_TOO_SMALL");
+});
+
+test("authorize is sponsored once the pool reaches the minimum (boundary: equal passes)", () => {
+  assert.equal(inspectCandidate(tx(call("authorize")), opts({ minMembers: 5, memberCount: 5 })).ok, true);
+});
+
+test("register is always sponsored so a small pool can grow", () => {
+  assert.equal(inspectCandidate(tx(call("register")), opts({ minMembers: 5, memberCount: 1 })).ok, true);
+});
+
+test("the policy is off unless both minMembers and memberCount are given", () => {
+  assert.equal(inspectCandidate(tx(call("authorize")), opts({ minMembers: 5 })).ok, true);
+  assert.equal(inspectCandidate(tx(call("authorize")), opts({ memberCount: 1 })).ok, true);
+});
