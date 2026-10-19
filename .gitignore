@@ -15,3 +15,4 @@ app/e2e/screenshots/
 app/src/generated/*/index.js.map
 __pycache__/
 *.pyc
+submission/wave2-submission-message.txt
